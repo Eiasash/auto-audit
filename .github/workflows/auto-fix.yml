@@ -1,0 +1,155 @@
+name: Tier 2 — Auto-fix dispatcher
+
+# Triggered manually for now. To make fully autonomous, the Tier 1 probe would also
+# fire a `repository_dispatch` event with the issue context, OR each watched repo would
+# need a small forwarder workflow that listens for `labeled` events and dispatches here.
+#
+# This workflow does NOT push to main of any target repo. It always opens a PR.
+# Set ANTHROPIC_API_KEY + MONITOR_PAT as repo secrets to enable.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Target repo (e.g. FamilyMedicine, InternalMedicine, Geriatrics, ward-helper, Toranot, watch-advisor2)'
+        type: choice
+        options:
+          - Geriatrics
+          - InternalMedicine
+          - FamilyMedicine
+          - ward-helper
+          - Toranot
+          - watch-advisor2
+        required: true
+      issue_number:
+        description: 'Issue number in the target repo (the auto-audit issue)'
+        type: string
+        required: true
+      fix_kind:
+        description: 'Fix template'
+        type: choice
+        options:
+          - version_trinity     # bump APP_VERSION + sw.js CACHE to match package.json
+          - sibling_sync        # propagate shared/fsrs.js or harrison_chapters.json to siblings
+          - investigate         # general — Claude reads issue, audits, proposes fix
+        default: version_trinity
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-fix-${{ inputs.target_repo }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      MONITOR_PAT: ${{ secrets.MONITOR_PAT }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Guard — secrets present
+        run: |
+          test -n "$MONITOR_PAT"        || { echo "::error::MONITOR_PAT not set"; exit 1; }
+          test -n "$ANTHROPIC_API_KEY"  || { echo "::error::ANTHROPIC_API_KEY not set — Tier 2 disabled"; exit 1; }
+
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          repository: Eiasash/${{ inputs.target_repo }}
+          token: ${{ secrets.MONITOR_PAT }}
+          path: target
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        working-directory: target
+        run: npm ci || npm install --no-audit --no-fund
+
+      # ── Fix template: version_trinity ──────────────────────────────
+      # Reproduces what Claude did manually for FM v1.7.3:
+      # find package.json version → bump APP_VERSION + sw.js CACHE to match.
+      # No Claude needed; deterministic, safe, easy to review.
+      - name: version_trinity fix
+        if: inputs.fix_kind == 'version_trinity'
+        working-directory: target
+        run: |
+          set -euo pipefail
+          PKG_VER=$(node -e "console.log(require('./package.json').version)")
+          # Pnimit normalize: 9.84.1.0 → 9.84.1
+          APP_VER=${PKG_VER%.0}
+          echo "package.json: $PKG_VER → APP_VERSION/CACHE: $APP_VER"
+          # Repo-specific touchpoints
+          case "${{ inputs.target_repo }}" in
+            FamilyMedicine|InternalMedicine)
+              sed -i -E "s/(APP_VERSION\s*=\s*')[^']+(')/\1${APP_VER}\2/" src/core/constants.js
+              # BUILD_HASH (best-effort, matches FM/Pnimit conventions)
+              sed -i -E "s/(BUILD_HASH\s*=\s*'[^-]+-v)[^']+(')/\1${APP_VER}\2/" src/core/constants.js || true
+              if [ "${{ inputs.target_repo }}" = "FamilyMedicine" ]; then
+                sed -i -E "s/(CACHE\s*=\s*'mishpacha-v)[^']+(')/\1${APP_VER}\2/" sw.js
+              else
+                sed -i -E "s/(CACHE\s*=\s*'pnimit-v)[^']+(')/\1${APP_VER}\2/" sw.js
+              fi
+              ;;
+            Geriatrics)
+              sed -i -E "s/(APP_VERSION\s*=\s*')[^']+(')/\1${APP_VER}\2/" shlav-a-mega.html
+              sed -i -E "s/(CACHE\s*=\s*'shlav-a-v)[^']+(')/\1${APP_VER}\2/" sw.js
+              ;;
+            *)
+              echo "::error::version_trinity not implemented for ${{ inputs.target_repo }}"; exit 1
+              ;;
+          esac
+          git diff --stat
+
+      # ── Fix template: investigate (Claude-driven) ─────────────────
+      # Placeholder: install Claude Code Action when first needed.
+      # See https://github.com/anthropics/claude-code-action for the canonical
+      # invocation. Disabled until ANTHROPIC_API_KEY is configured AND a real
+      # prompt is wired (out-of-scope for this bootstrap commit).
+      - name: investigate stub
+        if: inputs.fix_kind == 'investigate'
+        run: |
+          echo "::warning::investigate template not yet wired. Bring in anthropics/claude-code-action when ready."
+          echo "Issue: Eiasash/${{ inputs.target_repo }}#${{ inputs.issue_number }}"
+          exit 78  # GH Actions: "neutral" — doesn't fail the run, signals incomplete
+
+      # ── Quality gate: tests still pass after the fix ───────────────
+      - name: Run tests
+        if: inputs.fix_kind != 'investigate'
+        working-directory: target
+        run: |
+          if [ -f package.json ] && grep -q '"vitest"' package.json; then
+            npx vitest run --reporter=default
+          else
+            echo "No vitest detected, skipping"
+          fi
+
+      # ── PR back to target repo ─────────────────────────────────────
+      - name: Open PR with the fix
+        if: inputs.fix_kind != 'investigate'
+        working-directory: target
+        env:
+          GH_TOKEN: ${{ secrets.MONITOR_PAT }}
+        run: |
+          set -euo pipefail
+          BR="auto-fix/${{ inputs.fix_kind }}-issue-${{ inputs.issue_number }}-$(date -u +%Y%m%d%H%M)"
+          git config user.email "auto-audit-bot@users.noreply.github.com"
+          git config user.name  "auto-audit-bot"
+          git checkout -b "$BR"
+          git add -A
+          git commit -m "auto-fix: ${{ inputs.fix_kind }} (closes #${{ inputs.issue_number }})
+
+Auto-generated by Eiasash/auto-audit Tier 2 dispatcher."
+          git push --set-upstream origin "$BR"
+          # Open PR via the API (no gh CLI dependency)
+          BODY=$(printf 'Auto-generated fix.\n\nTrigger: workflow_dispatch from `Eiasash/auto-audit`.\nKind: `%s`\nClosed issue: #%s\n\nReview the diff before merging. Tier 2 never bypasses CI.' \
+            "${{ inputs.fix_kind }}" "${{ inputs.issue_number }}")
+          curl -sf -H "Authorization: token $MONITOR_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            -X POST "https://api.github.com/repos/Eiasash/${{ inputs.target_repo }}/pulls" \
+            -d "$(jq -n --arg t "auto-fix: ${{ inputs.fix_kind }}" --arg b "$BODY" --arg h "$BR" \
+                  '{title:$t,body:$b,head:$h,base:"main"}')"

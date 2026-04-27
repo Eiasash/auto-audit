@@ -1,0 +1,73 @@
+name: Tier 1 — Health Check
+
+on:
+  schedule:
+    # Every 30 minutes during work hours (06–22 UTC, +/- IL time), once at night.
+    # Cron uses UTC; expressions stay simple.
+    - cron: '*/30 6-22 * * *'
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'If true, skip issue creation (just write report)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # to commit health-reports/
+  issues:  write    # to file/comment on issues across repos (PAT does the heavy lifting though)
+
+concurrency:
+  group: health-check
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run probe
+        id: probe
+        env:
+          # MONITOR_PAT must have repo + issues scopes for ALL six target repos.
+          # Stored in this repo's secrets. The default GITHUB_TOKEN is scoped to
+          # this repo only and can't reach the others.
+          GH_TOKEN: ${{ secrets.MONITOR_PAT }}
+          DRY_RUN:  ${{ inputs.dry_run && '1' || '0' }}
+          REPORT_DIR: health-reports
+        run: |
+          set +e
+          python3 scripts/probe.py > /tmp/report.md
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Commit report
+        # Always commit — green or red — so the report directory is the audit trail.
+        run: |
+          git config user.email "auto-audit-bot@users.noreply.github.com"
+          git config user.name  "auto-audit-bot"
+          git add health-reports/
+          if git diff --cached --quiet; then
+            echo "No new report to commit"
+          else
+            git commit -m "auto-audit: health report $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          fi
+
+      - name: Surface red findings as job summary
+        if: always()
+        run: |
+          {
+            echo "## Latest health report"
+            echo ""
+            cat /tmp/report.md || echo "(no report)"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail the run if any critical
+        # Non-zero exit from probe.py == at least one critical finding.
+        # Failing the run gives the standard GH Actions email/red-X surface.
+        if: steps.probe.outputs.exit_code != '0'
+        run: |
+          echo "::error::Health check found critical issues (see job summary above)"
+          exit 1
