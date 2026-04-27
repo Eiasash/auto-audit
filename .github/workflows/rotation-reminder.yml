@@ -1,0 +1,56 @@
+name: Proxy secret rotation reminder
+
+# Fires Jan 1 and Jul 1 at 09:00 UTC. Opens an issue reminding to rotate.
+# Manual trigger also available for testing.
+
+on:
+  schedule:
+    - cron: "0 9 1 */6 *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const today = new Date().toISOString().slice(0, 10);
+            const body = [
+              `Routine 6-monthly proxy secret rotation reminder.`,
+              ``,
+              `**What:** Rotate \`API_SECRET\` (currently \`shlav-a-mega-2026\` if never rotated).`,
+              `**Why:** Hygiene — secret is in client JS so anyone with DevTools can read it. Periodic rotation makes scraped-and-reused tokens go stale.`,
+              `**How:** See [scripts/PROXY_SECRET_ROTATION.md](https://github.com/Eiasash/auto-audit/blob/main/scripts/PROXY_SECRET_ROTATION.md).`,
+              ``,
+              `Quick path:`,
+              `\`\`\`bash`,
+              `NEW_SECRET="shlav-$(openssl rand -hex 12)-2026"`,
+              `python scripts/rotate_proxy_secret.py \\`,
+              `  --old-secret '<current>' --new-secret "$NEW_SECRET" \\`,
+              `  --toranot-site 85d12386-b960-4f65-bee8-80e210ecd683 \\`,
+              `  --probe-url https://toranot.netlify.app/api/claude \\`,
+              `  --client 'Eiasash/Geriatrics:main:shlav-a-mega.html:https://eiasash.github.io/Geriatrics/' \\`,
+              `  --client 'Eiasash/InternalMedicine:main:src/core/constants.js:https://eiasash.github.io/InternalMedicine/' \\`,
+              `  --client 'Eiasash/FamilyMedicine:main:src/core/constants.js:https://eiasash.github.io/FamilyMedicine/' \\`,
+              `  --client 'Eiasash/ward-helper:main:src/agent/client.ts:https://eiasash.github.io/ward-helper/' \\`,
+              `  --phase open`,
+              `# wait 24h`,
+              `# ... --phase close --yes`,
+              `\`\`\``,
+              ``,
+              `Close this issue once rotation is complete.`,
+              ``,
+              `_Generated ${today}_`,
+            ].join("\n");
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "[reminder] Proxy secret rotation due",
+              body,
+              labels: ["rotation-reminder"],
+            });
