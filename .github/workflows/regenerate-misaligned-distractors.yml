@@ -1,0 +1,46 @@
+name: regenerate-misaligned-distractors
+
+# Manual dispatch from the Actions tab. Runs the auto-fix script that
+# detects + repairs misaligned data/distractors.json in Eiasash/Geriatrics
+# and opens a PR with the version-trinity bump.
+#
+# This is a separate workflow (not a job inside auto-fix.yml) so it stands
+# alone and doesn't depend on auto-fix.yml's input schema.
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Originating auto-audit issue number (optional). If set, the PR cross-links and the issue gets a comment + close.'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout auto-audit
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Run regenerate_misaligned_distractors.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.MONITOR_PAT }}
+          REPO: Eiasash/Geriatrics
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          chmod +x scripts/auto_fix/regenerate_misaligned_distractors.sh
+          bash scripts/auto_fix/regenerate_misaligned_distractors.sh
