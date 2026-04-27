@@ -6,8 +6,8 @@
     "topics": [
       {
         "id": 8,
-        "en": "Polypharmacy",
-        "he": "ריבוי תרופות",
+        "en": "Polypharmacy & Deprescribing",
+        "he": "פוליפרמסיה ודיפרסקריבינג",
         "keywords": [
           "polypharm",
           "Beers",
@@ -26,8 +26,8 @@
       },
       {
         "id": 26,
-        "en": "Cancer",
-        "he": "סרטן",
+        "en": "Cancer in the Elderly",
+        "he": "סרטן בקשישים",
         "keywords": [
           "cancer",
           "oncolog",
@@ -121,7 +121,7 @@
       },
       {
         "id": 28,
-        "en": "Palliative",
+        "en": "Palliative Care",
         "he": "טיפול פליאטיבי",
         "keywords": [
           "palliati",
@@ -141,8 +141,8 @@
       },
       {
         "id": 11,
-        "en": "Incontinence",
-        "he": "אי-נקיטה",
+        "en": "Urinary Incontinence",
+        "he": "אי-נקיטות שתן",
         "keywords": [
           "incontinen",
           "שלפוחית",
@@ -167,8 +167,8 @@
       },
       {
         "id": 17,
-        "en": "CV Disease",
-        "he": "מחלות לב וכלי דם",
+        "en": "Cardiology — IHD & ACS",
+        "he": "קרדיולוגיה — איסכמיה ו-ACS",
         "keywords": [
           "cardio",
           "cardiovascul",
@@ -186,8 +186,8 @@
       },
       {
         "id": 14,
-        "en": "Pain",
-        "he": "כאב",
+        "en": "Pain Management",
+        "he": "טיפול בכאב",
         "keywords": [
           "pain",
           "כאב",
@@ -204,8 +204,8 @@
       },
       {
         "id": 29,
-        "en": "Ethics",
-        "he": "אתיקה",
+        "en": "Medical Ethics & Capacity",
+        "he": "אתיקה רפואית וכשירות",
         "keywords": [
           "ethic",
           "אתיק",
@@ -240,7 +240,7 @@
       },
       {
         "id": 38,
-        "en": "Periop",
+        "en": "Perioperative Care",
         "he": "טיפול פריאופרטיבי",
         "keywords": [
           "periop",
@@ -258,8 +258,8 @@
       },
       {
         "id": 24,
-        "en": "CKD",
-        "he": "אי-ספיקת כליות כרונית",
+        "en": "Kidney Disease",
+        "he": "מחלות כליה",
         "keywords": [
           "kidney",
           "כלי",
@@ -296,7 +296,7 @@
       },
       {
         "id": 36,
-        "en": "Rehab",
+        "en": "Rehabilitation",
         "he": "שיקום",
         "keywords": [
           "rehabilit",
@@ -315,7 +315,7 @@
       },
       {
         "id": 40,
-        "en": "Parkinson's",
+        "en": "Parkinson's Disease",
         "he": "מחלת פרקינסון",
         "keywords": [
           "parkinson",
@@ -390,8 +390,8 @@
       },
       {
         "id": 3,
-        "en": "Frailty",
-        "he": "שבריריות",
+        "en": "Frailty & Sarcopenia",
+        "he": "שבריריות וסרקופניה",
         "keywords": [
           "frail",
           "שבריר",
@@ -408,7 +408,7 @@
       },
       {
         "id": 10,
-        "en": "Pressure Injuries",
+        "en": "Pressure Ulcers",
         "he": "פצעי לחץ",
         "keywords": [
           "pressure",
@@ -447,8 +447,8 @@
       },
       {
         "id": 35,
-        "en": "Community/LTC",
-        "he": "קהילה וטיפול ארוך-טווח",
+        "en": "Community & Long-Term Care",
+        "he": "קהילה וטיפול ממושך",
         "keywords": [
           "community",
           "קהיל",
@@ -465,8 +465,8 @@
       },
       {
         "id": 7,
-        "en": "Depression",
-        "he": "דיכאון",
+        "en": "Depression in the Elderly",
+        "he": "דיכאון בקשישים",
         "keywords": [
           "depress",
           "דיכאון",
@@ -524,8 +524,8 @@
       },
       {
         "id": 21,
-        "en": "COPD",
-        "he": "מחלת ריאות חסימתית כרונית",
+        "en": "Pulmonary Disease (COPD)",
+        "he": "מחלות ריאה (COPD)",
         "keywords": [
           "COPD",
           "pulmon",
@@ -562,7 +562,7 @@
       },
       {
         "id": 16,
-        "en": "OA",
+        "en": "Osteoarthritis",
         "he": "אוסטאוארטריטיס",
         "keywords": [
           "osteoarth",
@@ -594,7 +594,7 @@
       },
       {
         "id": 41,
-        "en": "Arrhythmia",
+        "en": "Arrhythmias",
         "he": "הפרעות קצב",
         "keywords": [
           "arrhythm",
@@ -664,8 +664,8 @@
       },
       {
         "id": 23,
-        "en": "Thyroid",
-        "he": "בלוטת התריס",
+        "en": "Thyroid Disorders",
+        "he": "מחלות בלוטת התריס",
         "keywords": [
           "thyroid",
           "תירואיד",
@@ -682,7 +682,7 @@
       },
       {
         "id": 32,
-        "en": "Guardianship",
+        "en": "Guardianship & Power of Attorney",
         "he": "אפוטרופסות וייפוי כוח",
         "keywords": [
           "guardian",
@@ -698,8 +698,8 @@
       },
       {
         "id": 2,
-        "en": "CGA",
-        "he": "הערכה גריאטרית כוללת",
+        "en": "Comprehensive Geriatric Assessment",
+        "he": "הערכה גריאטרית כוללנית",
         "keywords": [
           "CGA",
           "geriatric assessment",
@@ -717,8 +717,8 @@
       },
       {
         "id": 13,
-        "en": "Sleep",
-        "he": "שינה",
+        "en": "Sleep Disorders",
+        "he": "הפרעות שינה",
         "keywords": [
           "sleep",
           "שינה",
@@ -735,7 +735,7 @@
       },
       {
         "id": 37,
-        "en": "Vision/Hearing",
+        "en": "Vision & Hearing",
         "he": "ראייה ושמיעה",
         "keywords": [
           "vision",
@@ -754,8 +754,8 @@
       },
       {
         "id": 39,
-        "en": "Geri EM",
-        "he": "רפואה דחופה גריאטרית",
+        "en": "Geriatric Emergency Medicine",
+        "he": "רפואת חירום גריאטרית",
         "keywords": [
           "emergency",
           "מיון",
@@ -772,8 +772,8 @@
       },
       {
         "id": 31,
-        "en": "Driving",
-        "he": "נהיגה",
+        "en": "Driving Fitness",
+        "he": "כשירות לנהיגה",
         "keywords": [
           "driv",
           "נהיגה",
@@ -789,8 +789,8 @@
       },
       {
         "id": 44,
-        "en": "Prevention",
-        "he": "מניעה וקידום בריאות",
+        "en": "Preventive Screening (USPSTF)",
+        "he": "סקרינינג מונע (USPSTF)",
         "keywords": [
           "USPSTF",
           "prevent",
@@ -820,8 +820,8 @@
       },
       {
         "id": 1,
-        "en": "Demography",
-        "he": "דמוגרפיה",
+        "en": "Demography of Aging",
+        "he": "דמוגרפיה של ההזדקנות",
         "keywords": [
           "demograph",
           "epidemiol",
@@ -837,7 +837,7 @@
       {
         "id": 42,
         "en": "Dysphagia",
-        "he": "הפרעות בליעה",
+        "he": "דיספגיה",
         "keywords": [
           "dysphag",
           "בליעה",
@@ -875,7 +875,7 @@
       },
       {
         "id": 19,
-        "en": "HTN",
+        "en": "Hypertension",
         "he": "יתר לחץ דם",
         "keywords": [
           "hyperten",
@@ -937,8 +937,8 @@
       },
       {
         "id": 45,
-        "en": "Interdisciplinary Care",
-        "he": "טיפול בין-תחומי",
+        "en": "Interdisciplinary Team",
+        "he": "צוות רב-מקצועי",
         "keywords": [
           "interdisciplin",
           "multidisciplin",
@@ -972,8 +972,8 @@
     "topics": [
       {
         "id": 0,
-        "en": "Cardiology — Coronary",
-        "he": "",
+        "en": "Cardiology — IHD & ACS",
+        "he": "קרדיולוגיה — איסכמיה ו-ACS",
         "keywords": [
           "cardio",
           "cardiovascul",
@@ -995,8 +995,8 @@
       },
       {
         "id": 22,
-        "en": "Clinical Approach & Diagnostics",
-        "he": "",
+        "en": "Clinical Reasoning & Workup",
+        "he": "חשיבה קלינית ובירור",
         "keywords": [
           "clinical",
           "approach",
@@ -1014,8 +1014,8 @@
       },
       {
         "id": 5,
-        "en": "Pulmonology & VTE",
-        "he": "",
+        "en": "Pulmonary Diseases",
+        "he": "מחלות ריאה",
         "keywords": [
           "pulmon",
           "lung",
@@ -1042,8 +1042,8 @@
       },
       {
         "id": 10,
-        "en": "Hematology & Coagulation",
-        "he": "",
+        "en": "Hematology",
+        "he": "המטולוגיה",
         "keywords": [
           "hematol",
           "anemia",
@@ -1070,7 +1070,7 @@
       {
         "id": 6,
         "en": "Gastroenterology & Hepatology",
-        "he": "",
+        "he": "גסטרואנטרולוגיה והפטולוגיה",
         "keywords": [
           "gastro",
           "GI",
@@ -1094,7 +1094,7 @@
       {
         "id": 13,
         "en": "Rheumatology & Autoimmune",
-        "he": "",
+        "he": "ראומטולוגיה ואוטואימונית",
         "keywords": [
           "rheumatol",
           "autoimmun",
@@ -1118,7 +1118,7 @@
       {
         "id": 1,
         "en": "Heart Failure",
-        "he": "",
+        "he": "אי ספיקת לב",
         "keywords": [
           "heart fail",
           "HFrEF",
@@ -1140,8 +1140,8 @@
       },
       {
         "id": 12,
-        "en": "Infectious Disease",
-        "he": "",
+        "en": "Infectious Diseases",
+        "he": "מחלות זיהומיות",
         "keywords": [
           "infect",
           "antibiotic",
@@ -1164,8 +1164,8 @@
       },
       {
         "id": 7,
-        "en": "Nephrology",
-        "he": "",
+        "en": "Renal — CKD & AKI",
+        "he": "כליה — CKD ו-AKI",
         "keywords": [
           "kidney",
           "renal",
@@ -1185,8 +1185,8 @@
       },
       {
         "id": 3,
-        "en": "Valvular & Endocarditis",
-        "he": "",
+        "en": "Valvular Heart Disease & Endocarditis",
+        "he": "מחלת מסתמים ואנדוקרדיטיס",
         "keywords": [
           "valvul",
           "stenosis",
@@ -1204,8 +1204,8 @@
       },
       {
         "id": 15,
-        "en": "Critical Care & Shock",
-        "he": "",
+        "en": "Critical Care",
+        "he": "טיפול נמרץ",
         "keywords": [
           "ICU",
           "critical",
@@ -1225,8 +1225,8 @@
       },
       {
         "id": 21,
-        "en": "Toxicology",
-        "he": "",
+        "en": "Toxicology & Substance Use",
+        "he": "רעלנות והתמכרויות",
         "keywords": [
           "toxic",
           "poison",
@@ -1242,7 +1242,7 @@
       {
         "id": 16,
         "en": "Dermatology",
-        "he": "",
+        "he": "דרמטולוגיה",
         "keywords": [
           "dermatol",
           "skin",
@@ -1257,8 +1257,8 @@
       },
       {
         "id": 20,
-        "en": "Perioperative",
-        "he": "",
+        "en": "Perioperative Care",
+        "he": "טיפול פריאופרטיבי",
         "keywords": [
           "perioper",
           "surgery",
@@ -1273,7 +1273,7 @@
       {
         "id": 17,
         "en": "Allergy & Immunology",
-        "he": "",
+        "he": "אלרגיה ואימונולוגיה",
         "keywords": [
           "allergy",
           "anaphylaxis",
@@ -1288,8 +1288,8 @@
       },
       {
         "id": 19,
-        "en": "Pain & Palliative",
-        "he": "",
+        "en": "Pain & Palliative Care",
+        "he": "טיפול בכאב ופליאטיבי",
         "keywords": [
           "pain",
           "analges",
@@ -1306,8 +1306,8 @@
       },
       {
         "id": 23,
-        "en": "Vascular Disease",
-        "he": "",
+        "en": "Vascular Diseases",
+        "he": "מחלות כלי דם",
         "keywords": [
           "vascular",
           "aortic dissect",
@@ -1323,8 +1323,8 @@
       },
       {
         "id": 8,
-        "en": "Electrolytes & Acid-Base",
-        "he": "",
+        "en": "Electrolyte Disorders",
+        "he": "הפרעות אלקטרוליטים",
         "keywords": [
           "electrolyte",
           "sodium",
@@ -1347,8 +1347,8 @@
       },
       {
         "id": 11,
-        "en": "Oncology & Screening",
-        "he": "",
+        "en": "Oncology",
+        "he": "אונקולוגיה",
         "keywords": [
           "oncolog",
           "cancer",
@@ -1369,8 +1369,8 @@
       },
       {
         "id": 18,
-        "en": "Fluids & Volume",
-        "he": "",
+        "en": "Fluid & Volume Management",
+        "he": "איזון נוזלים",
         "keywords": [
           "fluid",
           "edema",
@@ -1386,8 +1386,8 @@
       },
       {
         "id": 9,
-        "en": "Endocrinology & Diabetes",
-        "he": "",
+        "en": "Endocrinology",
+        "he": "אנדוקרינולוגיה",
         "keywords": [
           "endocrin",
           "diabet",
@@ -1410,8 +1410,8 @@
       },
       {
         "id": 14,
-        "en": "Neurology & Stroke",
-        "he": "",
+        "en": "Neurology",
+        "he": "נוירולוגיה",
         "keywords": [
           "neurol",
           "stroke",
@@ -1435,8 +1435,8 @@
       },
       {
         "id": 2,
-        "en": "Arrhythmias & ECG",
-        "he": "",
+        "en": "Arrhythmias & Pacing",
+        "he": "הפרעות קצב וקיצוב",
         "keywords": [
           "arrhythm",
           "atrial fibril",
@@ -1460,7 +1460,7 @@
       {
         "id": 4,
         "en": "Hypertension",
-        "he": "",
+        "he": "יתר לחץ דם",
         "keywords": [
           "hyperten",
           "blood pressure",
