@@ -1,0 +1,1731 @@
+{
+  "Geri": {
+    "repo": "Eiasash/Geriatrics",
+    "total_questions_analyzed": 3833,
+    "total_topics": 46,
+    "topics": [
+      {
+        "id": 8,
+        "en": "Polypharm",
+        "he": "",
+        "keywords": [
+          "polypharm",
+          "Beers",
+          "STOPP",
+          "START",
+          "deprescrib",
+          "אנטיכולינרג",
+          "anticholinerg",
+          "ACB",
+          "prescribing cascade",
+          "PIM"
+        ],
+        "n_questions": 318,
+        "frequency_pct": 8.3,
+        "weight": 3.82
+      },
+      {
+        "id": 26,
+        "en": "Cancer",
+        "he": "",
+        "keywords": [
+          "cancer",
+          "oncolog",
+          "סרטן",
+          "tumor",
+          "chemo",
+          "malign",
+          "metasta",
+          "neoplasm",
+          "tumor lysis",
+          "typhlitis"
+        ],
+        "n_questions": 201,
+        "frequency_pct": 5.2,
+        "weight": 2.41
+      },
+      {
+        "id": 6,
+        "en": "Dementia",
+        "he": "",
+        "keywords": [
+          "dementia",
+          "דמנציה",
+          "alzheimer",
+          "אלצהיימר",
+          "DLB",
+          "FTD",
+          "MMSE",
+          "MoCA",
+          "CDR",
+          "lewy",
+          "amyloid"
+        ],
+        "n_questions": 183,
+        "frequency_pct": 4.8,
+        "weight": 2.2
+      },
+      {
+        "id": 27,
+        "en": "Infect",
+        "he": "",
+        "keywords": [
+          "infect",
+          "זיהום",
+          "antibiotic",
+          "pneumonia",
+          "UTI",
+          "sepsis",
+          "bacterem",
+          "immunosenesc",
+          "nitrofurantoin"
+        ],
+        "n_questions": 179,
+        "frequency_pct": 4.7,
+        "weight": 2.15
+      },
+      {
+        "id": 5,
+        "en": "Delirium",
+        "he": "",
+        "keywords": [
+          "delirium",
+          "דליריום",
+          "CAM",
+          "בלבול",
+          "confusion",
+          "4AT",
+          "HELP protocol",
+          "hypoactive"
+        ],
+        "n_questions": 176,
+        "frequency_pct": 4.6,
+        "weight": 2.11
+      },
+      {
+        "id": 4,
+        "en": "Fall",
+        "he": "",
+        "keywords": [
+          "fall",
+          "נפיל",
+          "TUG",
+          "orthostatic",
+          "balance",
+          "hip protector",
+          "Tai Chi"
+        ],
+        "n_questions": 141,
+        "frequency_pct": 3.7,
+        "weight": 1.69
+      },
+      {
+        "id": 28,
+        "en": "Palliati",
+        "he": "",
+        "keywords": [
+          "palliati",
+          "הנוטה למות",
+          "hospice",
+          "end of life",
+          "dyspnea",
+          "Mitchell",
+          "comfort",
+          "FAST 7",
+          "NG tube",
+          "PEG tube"
+        ],
+        "n_questions": 120,
+        "frequency_pct": 3.1,
+        "weight": 1.44
+      },
+      {
+        "id": 11,
+        "en": "Incontinen",
+        "he": "",
+        "keywords": [
+          "incontinen",
+          "שלפוחית",
+          "bladder",
+          "urinary",
+          "detrusor",
+          "Kegel",
+          "שתן",
+          "אצירת שתן",
+          "fecal",
+          "stool",
+          "sphincter",
+          "RAIR",
+          "overflow",
+          "צואה",
+          "אי-נקיטת צואה",
+          "אי נקיטת צואה"
+        ],
+        "n_questions": 117,
+        "frequency_pct": 3.1,
+        "weight": 1.4
+      },
+      {
+        "id": 17,
+        "en": "Cardio",
+        "he": "",
+        "keywords": [
+          "cardio",
+          "cardiovascul",
+          "coronar",
+          "MI",
+          "ischemi",
+          "angina",
+          "stent",
+          "PVD",
+          "peripheral vascular"
+        ],
+        "n_questions": 116,
+        "frequency_pct": 3.0,
+        "weight": 1.39
+      },
+      {
+        "id": 14,
+        "en": "Pain",
+        "he": "",
+        "keywords": [
+          "pain",
+          "כאב",
+          "analges",
+          "opioid",
+          "WHO ladder",
+          "gabapentin",
+          "acetaminophen",
+          "morphine"
+        ],
+        "n_questions": 113,
+        "frequency_pct": 2.9,
+        "weight": 1.36
+      },
+      {
+        "id": 29,
+        "en": "Ethic",
+        "he": "",
+        "keywords": [
+          "ethic",
+          "אתיק",
+          "autonomy",
+          "beneficence",
+          "capacity",
+          "כשירות",
+          "informed consent",
+          "futility",
+          "rationing"
+        ],
+        "n_questions": 111,
+        "frequency_pct": 2.9,
+        "weight": 1.33
+      },
+      {
+        "id": 34,
+        "en": "Advance Directive",
+        "he": "",
+        "keywords": [
+          "advance directive",
+          "הנחיות מקדימות",
+          "הנוטה למות",
+          "living will",
+          "DNR",
+          "withhold",
+          "withdraw"
+        ],
+        "n_questions": 105,
+        "frequency_pct": 2.7,
+        "weight": 1.26
+      },
+      {
+        "id": 38,
+        "en": "Periop",
+        "he": "",
+        "keywords": [
+          "periop",
+          "surgery",
+          "ניתוח",
+          "preop",
+          "postop",
+          "anesthes",
+          "DVT prophylaxis",
+          "hip fracture"
+        ],
+        "n_questions": 103,
+        "frequency_pct": 2.7,
+        "weight": 1.24
+      },
+      {
+        "id": 24,
+        "en": "Kidney",
+        "he": "",
+        "keywords": [
+          "kidney",
+          "כלי",
+          "CKD",
+          "creatinin",
+          "GFR",
+          "nephro",
+          "renal",
+          "dialys",
+          "aminoglycoside"
+        ],
+        "n_questions": 102,
+        "frequency_pct": 2.7,
+        "weight": 1.22
+      },
+      {
+        "id": 18,
+        "en": "Heart Fail",
+        "he": "",
+        "keywords": [
+          "heart fail",
+          "אי ספיקת לב",
+          "HFrEF",
+          "HFpEF",
+          "EF",
+          "ARNI",
+          "ejection",
+          "carvedilol",
+          "spironolactone"
+        ],
+        "n_questions": 99,
+        "frequency_pct": 2.6,
+        "weight": 1.19
+      },
+      {
+        "id": 36,
+        "en": "Rehabilit",
+        "he": "",
+        "keywords": [
+          "rehabilit",
+          "שיקום",
+          "FIM",
+          "physiotherapy",
+          "PT",
+          "OT",
+          "mobiliz",
+          "motor",
+          "walking stick"
+        ],
+        "n_questions": 96,
+        "frequency_pct": 2.5,
+        "weight": 1.15
+      },
+      {
+        "id": 40,
+        "en": "Parkinson",
+        "he": "",
+        "keywords": [
+          "parkinson",
+          "פרקינסון",
+          "levodopa",
+          "L-DOPA",
+          "carbidopa",
+          "סינמט",
+          "madopar",
+          "pramipexol",
+          "ropinirole",
+          "rasagiline",
+          "selegiline",
+          "entacapone",
+          "rotigotine",
+          "amantadine",
+          "apomorphine",
+          "DBS",
+          "deep brain stim",
+          "גירוי מוחי עמוק",
+          "bradykines",
+          "רעד במנוחה",
+          "MSA",
+          "PSP",
+          "corticobasal",
+          "Hoehn-Yahr",
+          "UPDRS",
+          "dyskinesi",
+          "on-off",
+          "פרקינסוני",
+          "פרקינסוניזם"
+        ],
+        "n_questions": 94,
+        "frequency_pct": 2.5,
+        "weight": 1.13
+      },
+      {
+        "id": 0,
+        "en": "Biology",
+        "he": "",
+        "keywords": [
+          "biology",
+          "aging",
+          "telomer",
+          "senesc",
+          "ROS",
+          "oxidat",
+          "hayflick",
+          "caloric"
+        ],
+        "n_questions": 88,
+        "frequency_pct": 2.3,
+        "weight": 1.06
+      },
+      {
+        "id": 12,
+        "en": "Constipat",
+        "he": "",
+        "keywords": [
+          "constipat",
+          "עצירות",
+          "lactulose",
+          "bisacodyl",
+          "senna",
+          "PEG",
+          "laxat",
+          "normalax"
+        ],
+        "n_questions": 83,
+        "frequency_pct": 2.2,
+        "weight": 1.0
+      },
+      {
+        "id": 3,
+        "en": "Frail",
+        "he": "",
+        "keywords": [
+          "frail",
+          "שבריר",
+          "sarcopenia",
+          "EWGSOP",
+          "SARC-F",
+          "Fried",
+          "CFS",
+          "grip strength"
+        ],
+        "n_questions": 79,
+        "frequency_pct": 2.1,
+        "weight": 0.95
+      },
+      {
+        "id": 10,
+        "en": "Pressure",
+        "he": "",
+        "keywords": [
+          "pressure",
+          "פצע לחץ",
+          "decubit",
+          "Braden",
+          "Norton",
+          "NPUAP",
+          "wound",
+          "dressing",
+          "ulcer stage"
+        ],
+        "n_questions": 79,
+        "frequency_pct": 2.1,
+        "weight": 0.95
+      },
+      {
+        "id": 22,
+        "en": "Diabet",
+        "he": "",
+        "keywords": [
+          "diabet",
+          "סוכרת",
+          "HbA1c",
+          "A1c",
+          "metformin",
+          "insulin",
+          "SGLT2",
+          "glipizide",
+          "hypoglycem",
+          "ACCORD"
+        ],
+        "n_questions": 72,
+        "frequency_pct": 1.9,
+        "weight": 0.86
+      },
+      {
+        "id": 35,
+        "en": "Community",
+        "he": "",
+        "keywords": [
+          "community",
+          "קהיל",
+          "long-term",
+          "nursing home",
+          "home care",
+          "day center",
+          "CAPABLE",
+          "kupat"
+        ],
+        "n_questions": 69,
+        "frequency_pct": 1.8,
+        "weight": 0.83
+      },
+      {
+        "id": 7,
+        "en": "Depress",
+        "he": "",
+        "keywords": [
+          "depress",
+          "דיכאון",
+          "GDS",
+          "SSRI",
+          "antidepress",
+          "ECT",
+          "pseudodementia",
+          "bupropion",
+          "mirtazapine"
+        ],
+        "n_questions": 66,
+        "frequency_pct": 1.7,
+        "weight": 0.79
+      },
+      {
+        "id": 20,
+        "en": "Stroke",
+        "he": "",
+        "keywords": [
+          "stroke",
+          "שבץ",
+          "CVA",
+          "TIA",
+          "ABCD2",
+          "MCA",
+          "ACA",
+          "PCA",
+          "aphasia",
+          "hemipl",
+          "thrombolys"
+        ],
+        "n_questions": 62,
+        "frequency_pct": 1.6,
+        "weight": 0.74
+      },
+      {
+        "id": 15,
+        "en": "Osteopor",
+        "he": "",
+        "keywords": [
+          "osteopor",
+          "צפיפות עצם",
+          "T-score",
+          "FRAX",
+          "bisphosph",
+          "denosumab",
+          "alendronate",
+          "zoledronic",
+          "bone density"
+        ],
+        "n_questions": 61,
+        "frequency_pct": 1.6,
+        "weight": 0.73
+      },
+      {
+        "id": 21,
+        "en": "Copd",
+        "he": "",
+        "keywords": [
+          "COPD",
+          "pulmon",
+          "ריאה",
+          "FEV1",
+          "FVC",
+          "DLCO",
+          "pneumon",
+          "respiratory",
+          "IPF",
+          "residual volume"
+        ],
+        "n_questions": 61,
+        "frequency_pct": 1.6,
+        "weight": 0.73
+      },
+      {
+        "id": 25,
+        "en": "Anem",
+        "he": "",
+        "keywords": [
+          "anem",
+          "המוגלובין",
+          "iron",
+          "ferritin",
+          "B12",
+          "MDS",
+          "erythropoietin",
+          "transferrin"
+        ],
+        "n_questions": 61,
+        "frequency_pct": 1.6,
+        "weight": 0.73
+      },
+      {
+        "id": 16,
+        "en": "Osteoarth",
+        "he": "",
+        "keywords": [
+          "osteoarth",
+          "OA",
+          "מפרק",
+          "joint",
+          "arthr",
+          "TENS",
+          "arthroplasty"
+        ],
+        "n_questions": 58,
+        "frequency_pct": 1.5,
+        "weight": 0.7
+      },
+      {
+        "id": 30,
+        "en": "Abuse",
+        "he": "",
+        "keywords": [
+          "abuse",
+          "התעללות",
+          "neglect",
+          "mandatory report",
+          "elder abuse"
+        ],
+        "n_questions": 57,
+        "frequency_pct": 1.5,
+        "weight": 0.68
+      },
+      {
+        "id": 41,
+        "en": "Arrhythm",
+        "he": "",
+        "keywords": [
+          "arrhythm",
+          "הפרעת קצב",
+          "הפרעות קצב",
+          "atrial fibrill",
+          "פרפור עליות",
+          "פרפור פרוזדורים",
+          "AFib",
+          "atrial flutter",
+          "רפרוף עליות",
+          "sick sinus",
+          "SSS",
+          "tachy-brady",
+          "AV block",
+          "חסם AV",
+          "חסם הולכה",
+          "heart block",
+          "pacemaker",
+          "קוצב לב",
+          "biventricular",
+          "CRT",
+          "bradyarrhythm",
+          "ברדיקרדי",
+          "SVT",
+          "ventricular tachy",
+          "VT",
+          "VF",
+          "torsades",
+          "long QT",
+          "WPW",
+          "Wolff-Parkinson",
+          "CHA2DS2",
+          "HAS-BLED",
+          "rate control",
+          "rhythm control",
+          "cardioversion",
+          "ablation",
+          "amiodarone",
+          "apixaban",
+          "rivaroxaban",
+          "edoxaban",
+          "dabigatran"
+        ],
+        "n_questions": 50,
+        "frequency_pct": 1.3,
+        "weight": 0.6
+      },
+      {
+        "id": 9,
+        "en": "Nutrit",
+        "he": "",
+        "keywords": [
+          "nutrit",
+          "malnutrit",
+          "MNA",
+          "תזונ",
+          "albumin",
+          "BMI",
+          "weight loss",
+          "ירידה במשקל",
+          "protein"
+        ],
+        "n_questions": 48,
+        "frequency_pct": 1.3,
+        "weight": 0.58
+      },
+      {
+        "id": 23,
+        "en": "Thyroid",
+        "he": "",
+        "keywords": [
+          "thyroid",
+          "תירואיד",
+          "TSH",
+          "levothyrox",
+          "amiodarone",
+          "hypothyroid",
+          "hyperthyroid",
+          "euthyroid"
+        ],
+        "n_questions": 46,
+        "frequency_pct": 1.2,
+        "weight": 0.55
+      },
+      {
+        "id": 32,
+        "en": "Guardian",
+        "he": "",
+        "keywords": [
+          "guardian",
+          "אפוטרופ",
+          "ייפוי כוח",
+          "legal capacity",
+          "power of attorney",
+          "תשוש נפש"
+        ],
+        "n_questions": 44,
+        "frequency_pct": 1.1,
+        "weight": 0.53
+      },
+      {
+        "id": 2,
+        "en": "Cga",
+        "he": "",
+        "keywords": [
+          "CGA",
+          "geriatric assessment",
+          "הערכה",
+          "ADL",
+          "IADL",
+          "FIM",
+          "Barthel",
+          "Katz",
+          "comprehensive"
+        ],
+        "n_questions": 39,
+        "frequency_pct": 1.0,
+        "weight": 0.47
+      },
+      {
+        "id": 13,
+        "en": "Sleep",
+        "he": "",
+        "keywords": [
+          "sleep",
+          "שינה",
+          "insomnia",
+          "melatonin",
+          "zolpidem",
+          "OSA",
+          "CPAP",
+          "RBD"
+        ],
+        "n_questions": 38,
+        "frequency_pct": 1.0,
+        "weight": 0.46
+      },
+      {
+        "id": 37,
+        "en": "Vision",
+        "he": "",
+        "keywords": [
+          "vision",
+          "hearing",
+          "שמיעה",
+          "ראיה",
+          "presbycusis",
+          "cataract",
+          "macular",
+          "AMD",
+          "glaucoma"
+        ],
+        "n_questions": 36,
+        "frequency_pct": 0.9,
+        "weight": 0.43
+      },
+      {
+        "id": 39,
+        "en": "Emergency",
+        "he": "",
+        "keywords": [
+          "emergency",
+          "מיון",
+          "ED ",
+          "triage",
+          "geriatric emergency",
+          "EQUiPPED",
+          "typhlitis",
+          "atypical present"
+        ],
+        "n_questions": 36,
+        "frequency_pct": 0.9,
+        "weight": 0.43
+      },
+      {
+        "id": 31,
+        "en": "Driv",
+        "he": "",
+        "keywords": [
+          "driv",
+          "נהיגה",
+          "מרב\"ד",
+          "license",
+          "CDR",
+          "רישיון",
+          "road safety"
+        ],
+        "n_questions": 34,
+        "frequency_pct": 0.9,
+        "weight": 0.41
+      },
+      {
+        "id": 44,
+        "en": "Uspstf",
+        "he": "",
+        "keywords": [
+          "USPSTF",
+          "prevent",
+          "מניעה",
+          "screen",
+          "סקירה",
+          "מבחן סקר",
+          "vaccin",
+          "חיסון",
+          "immuniz",
+          "chemoprev",
+          "primary prevention",
+          "secondary prevention",
+          "מניעה ראשונית",
+          "מניעה משנית",
+          "health promotion",
+          "קידום בריאות",
+          "preventive home visit",
+          "AAA screen",
+          "colon cancer screen",
+          "mammog",
+          "PSA"
+        ],
+        "n_questions": 34,
+        "frequency_pct": 0.9,
+        "weight": 0.41
+      },
+      {
+        "id": 1,
+        "en": "Demograph",
+        "he": "",
+        "keywords": [
+          "demograph",
+          "epidemiol",
+          "brookdale",
+          "תוחלת",
+          "אוכלוסי",
+          "life expectancy"
+        ],
+        "n_questions": 33,
+        "frequency_pct": 0.9,
+        "weight": 0.4
+      },
+      {
+        "id": 42,
+        "en": "Dysphag",
+        "he": "",
+        "keywords": [
+          "dysphag",
+          "בליעה",
+          "הפרעת בליעה",
+          "הפרעות בליעה",
+          "swallow",
+          "VFSS",
+          "videofluoroscop",
+          "FEES",
+          "fiberoptic endoscop",
+          "aspiration pneumon",
+          "דלקת ריאות אספיר",
+          "אספירציה",
+          "oropharyngeal",
+          "cricopharyng",
+          "zenker",
+          "thickened liquid",
+          "מזון טחון",
+          "מרקם טחון",
+          "PEG tube",
+          "NG tube",
+          "זונדה",
+          "nasogastric",
+          "gastrostomy",
+          "penetration-aspiration",
+          "PAS",
+          "speech language",
+          "SLP",
+          "קלינאי תקשורת",
+          "קלינאית תקשורת"
+        ],
+        "n_questions": 33,
+        "frequency_pct": 0.9,
+        "weight": 0.4
+      },
+      {
+        "id": 19,
+        "en": "Hyperten",
+        "he": "",
+        "keywords": [
+          "hyperten",
+          "לחץ דם",
+          "SPRINT",
+          "HYVET",
+          "amlodipine",
+          "HTN",
+          "antihypertens",
+          "doxazosin"
+        ],
+        "n_questions": 31,
+        "frequency_pct": 0.8,
+        "weight": 0.37
+      },
+      {
+        "id": 33,
+        "en": "Patient Right",
+        "he": "",
+        "keywords": [
+          "patient right",
+          "זכויות החולה",
+          "informed consent",
+          "refuse",
+          "privacy",
+          "סודיות",
+          "autonomy"
+        ],
+        "n_questions": 31,
+        "frequency_pct": 0.8,
+        "weight": 0.37
+      },
+      {
+        "id": 43,
+        "en": "Androp",
+        "he": "",
+        "keywords": [
+          "androp",
+          "אנדרופאוז",
+          "testosteron",
+          "טסטוסטרון",
+          "hypogonad",
+          "היפוגונדיזם",
+          "aging man",
+          "libido",
+          "תשוקה מינית",
+          "erectile dys",
+          "ED",
+          "אין-אונות",
+          "BPH",
+          "PDE5",
+          "sildenafil",
+          "tadalafil",
+          "androgen deficiency"
+        ],
+        "n_questions": 21,
+        "frequency_pct": 0.5,
+        "weight": 0.25
+      },
+      {
+        "id": 45,
+        "en": "Interdisciplin",
+        "he": "",
+        "keywords": [
+          "interdisciplin",
+          "multidisciplin",
+          "interprofes",
+          "צוות בין-תחומי",
+          "צוות גריאטרי",
+          "Guided Care",
+          "GRACE",
+          "PACE program",
+          "Program of All-Inclusive",
+          "transitional care",
+          "Care Transitions",
+          "transitions of care",
+          "team-based",
+          "patient coach",
+          "care coordin",
+          "תיאום טיפול",
+          "hospital at home",
+          "בית חולים בבית"
+        ],
+        "n_questions": 9,
+        "frequency_pct": 0.2,
+        "weight": 0.11
+      }
+    ]
+  },
+  "Pnimit": {
+    "repo": "Eiasash/InternalMedicine",
+    "total_questions_analyzed": 1556,
+    "total_topics": 24,
+    "topics": [
+      {
+        "id": 0,
+        "en": "Cardio",
+        "he": "",
+        "keywords": [
+          "cardio",
+          "cardiovascul",
+          "coronar",
+          "MI",
+          "ischemi",
+          "angina",
+          "stent",
+          "ACS",
+          "STEMI",
+          "NSTEMI",
+          "PCI",
+          "CABG",
+          "troponin"
+        ],
+        "n_questions": 131,
+        "frequency_pct": 8.4,
+        "weight": 2.02
+      },
+      {
+        "id": 22,
+        "en": "Clinical",
+        "he": "",
+        "keywords": [
+          "clinical",
+          "approach",
+          "differenti",
+          "diagnostic",
+          "workup",
+          "imaging",
+          "lab",
+          "screening",
+          "prevention"
+        ],
+        "n_questions": 130,
+        "frequency_pct": 8.4,
+        "weight": 2.01
+      },
+      {
+        "id": 5,
+        "en": "Pulmon",
+        "he": "",
+        "keywords": [
+          "pulmon",
+          "lung",
+          "COPD",
+          "asthma",
+          "pneumon",
+          "respiratory",
+          "FEV1",
+          "FVC",
+          "bronch",
+          "ARDS",
+          "pulmonary embol",
+          "PE",
+          "DVT",
+          "VTE",
+          "sarcoid",
+          "IPF",
+          "PAH",
+          "sotatercept"
+        ],
+        "n_questions": 105,
+        "frequency_pct": 6.7,
+        "weight": 1.62
+      },
+      {
+        "id": 10,
+        "en": "Hematol",
+        "he": "",
+        "keywords": [
+          "hematol",
+          "anemia",
+          "iron",
+          "ferritin",
+          "B12",
+          "leukemia",
+          "lymphoma",
+          "thrombocyt",
+          "coagul",
+          "bleeding",
+          "DVT",
+          "anticoagul",
+          "warfarin",
+          "apixaban",
+          "heparin",
+          "myeloma",
+          "MDS"
+        ],
+        "n_questions": 93,
+        "frequency_pct": 6.0,
+        "weight": 1.43
+      },
+      {
+        "id": 6,
+        "en": "Gastro",
+        "he": "",
+        "keywords": [
+          "gastro",
+          "GI",
+          "liver",
+          "hepat",
+          "cirrhosis",
+          "IBD",
+          "Crohn",
+          "colitis",
+          "GERD",
+          "pancreat",
+          "GI bleed",
+          "ascites",
+          "portal hypertens",
+          "varices"
+        ],
+        "n_questions": 88,
+        "frequency_pct": 5.7,
+        "weight": 1.36
+      },
+      {
+        "id": 13,
+        "en": "Rheumatol",
+        "he": "",
+        "keywords": [
+          "rheumatol",
+          "autoimmun",
+          "lupus",
+          "SLE",
+          "vasculitis",
+          "rheumatoid",
+          "scleroderma",
+          "sarcoid",
+          "giant cell",
+          "GCA",
+          "ANCA",
+          "upadacitinib",
+          "gout",
+          "crystal"
+        ],
+        "n_questions": 79,
+        "frequency_pct": 5.1,
+        "weight": 1.22
+      },
+      {
+        "id": 1,
+        "en": "Heart Fail",
+        "he": "",
+        "keywords": [
+          "heart fail",
+          "HFrEF",
+          "HFpEF",
+          "EF",
+          "ARNI",
+          "ejection",
+          "carvedilol",
+          "spironolactone",
+          "digitoxin",
+          "sacubitril",
+          "SGLT2",
+          "BNP",
+          "NT-proBNP"
+        ],
+        "n_questions": 68,
+        "frequency_pct": 4.4,
+        "weight": 1.05
+      },
+      {
+        "id": 12,
+        "en": "Infect",
+        "he": "",
+        "keywords": [
+          "infect",
+          "antibiotic",
+          "sepsis",
+          "bacteremia",
+          "bloodstream",
+          "pneumonia",
+          "UTI",
+          "endocarditis",
+          "meningitis",
+          "osteomyelitis",
+          "HIV",
+          "TB",
+          "fungal",
+          "viral"
+        ],
+        "n_questions": 64,
+        "frequency_pct": 4.1,
+        "weight": 0.99
+      },
+      {
+        "id": 7,
+        "en": "Kidney",
+        "he": "",
+        "keywords": [
+          "kidney",
+          "renal",
+          "CKD",
+          "AKI",
+          "creatinine",
+          "GFR",
+          "nephro",
+          "dialys",
+          "glomerul",
+          "proteinuria",
+          "tubular"
+        ],
+        "n_questions": 62,
+        "frequency_pct": 4.0,
+        "weight": 0.96
+      },
+      {
+        "id": 3,
+        "en": "Valvul",
+        "he": "",
+        "keywords": [
+          "valvul",
+          "stenosis",
+          "regurgit",
+          "aortic",
+          "mitral",
+          "tricuspid",
+          "endocard",
+          "murmur",
+          "prosthetic"
+        ],
+        "n_questions": 59,
+        "frequency_pct": 3.8,
+        "weight": 0.91
+      },
+      {
+        "id": 15,
+        "en": "Icu",
+        "he": "",
+        "keywords": [
+          "ICU",
+          "critical",
+          "shock",
+          "septic shock",
+          "cardiogenic",
+          "ventilat",
+          "intubat",
+          "vasopressor",
+          "cardiac arrest",
+          "ACLS",
+          "resuscitat"
+        ],
+        "n_questions": 57,
+        "frequency_pct": 3.7,
+        "weight": 0.88
+      },
+      {
+        "id": 21,
+        "en": "Toxic",
+        "he": "",
+        "keywords": [
+          "toxic",
+          "poison",
+          "overdose",
+          "alcohol",
+          "substance",
+          "withdrawal"
+        ],
+        "n_questions": 56,
+        "frequency_pct": 3.6,
+        "weight": 0.86
+      },
+      {
+        "id": 16,
+        "en": "Dermatol",
+        "he": "",
+        "keywords": [
+          "dermatol",
+          "skin",
+          "rash",
+          "urticaria",
+          "psoriasis",
+          "melanoma"
+        ],
+        "n_questions": 54,
+        "frequency_pct": 3.5,
+        "weight": 0.83
+      },
+      {
+        "id": 20,
+        "en": "Perioper",
+        "he": "",
+        "keywords": [
+          "perioper",
+          "surgery",
+          "preop",
+          "DVT prophylaxis",
+          "anesthes"
+        ],
+        "n_questions": 54,
+        "frequency_pct": 3.5,
+        "weight": 0.83
+      },
+      {
+        "id": 17,
+        "en": "Allergy",
+        "he": "",
+        "keywords": [
+          "allergy",
+          "anaphylaxis",
+          "drug reaction",
+          "immunol",
+          "vaccine",
+          "immunodeficien"
+        ],
+        "n_questions": 53,
+        "frequency_pct": 3.4,
+        "weight": 0.82
+      },
+      {
+        "id": 19,
+        "en": "Pain",
+        "he": "",
+        "keywords": [
+          "pain",
+          "analges",
+          "opioid",
+          "palliati",
+          "dyspnea",
+          "symptom",
+          "nausea",
+          "vomit"
+        ],
+        "n_questions": 53,
+        "frequency_pct": 3.4,
+        "weight": 0.82
+      },
+      {
+        "id": 23,
+        "en": "Vascular",
+        "he": "",
+        "keywords": [
+          "vascular",
+          "aortic dissect",
+          "aneurysm",
+          "peripheral arter",
+          "PVD",
+          "carotid",
+          "mesenteric"
+        ],
+        "n_questions": 53,
+        "frequency_pct": 3.4,
+        "weight": 0.82
+      },
+      {
+        "id": 8,
+        "en": "Electrolyte",
+        "he": "",
+        "keywords": [
+          "electrolyte",
+          "sodium",
+          "potassium",
+          "calcium",
+          "magnesium",
+          "phosph",
+          "hyponatr",
+          "hyperkal",
+          "hypokal",
+          "acid-base",
+          "acidosis",
+          "alkalosis",
+          "metabolic",
+          "respiratory"
+        ],
+        "n_questions": 52,
+        "frequency_pct": 3.3,
+        "weight": 0.8
+      },
+      {
+        "id": 11,
+        "en": "Oncolog",
+        "he": "",
+        "keywords": [
+          "oncolog",
+          "cancer",
+          "tumor",
+          "chemo",
+          "immunother",
+          "metasta",
+          "screening",
+          "cfDNA",
+          "colorectal",
+          "lung cancer",
+          "breast",
+          "prostate"
+        ],
+        "n_questions": 52,
+        "frequency_pct": 3.3,
+        "weight": 0.8
+      },
+      {
+        "id": 18,
+        "en": "Fluid",
+        "he": "",
+        "keywords": [
+          "fluid",
+          "edema",
+          "dehydrat",
+          "volume",
+          "IV fluid",
+          "hypovolemia",
+          "hypervolemia"
+        ],
+        "n_questions": 52,
+        "frequency_pct": 3.3,
+        "weight": 0.8
+      },
+      {
+        "id": 9,
+        "en": "Endocrin",
+        "he": "",
+        "keywords": [
+          "endocrin",
+          "diabet",
+          "DM",
+          "HbA1c",
+          "insulin",
+          "thyroid",
+          "TSH",
+          "adrenal",
+          "Cushing",
+          "Addison",
+          "pituitary",
+          "pheochromocytoma",
+          "SGLT2",
+          "GLP-1"
+        ],
+        "n_questions": 41,
+        "frequency_pct": 2.6,
+        "weight": 0.63
+      },
+      {
+        "id": 14,
+        "en": "Neurol",
+        "he": "",
+        "keywords": [
+          "neurol",
+          "stroke",
+          "CVA",
+          "seizure",
+          "epilepsy",
+          "Parkinson",
+          "MS",
+          "neuropathy",
+          "Guillain",
+          "myasthenia",
+          "meningitis",
+          "encephalitis",
+          "carotid",
+          "headache",
+          "coma"
+        ],
+        "n_questions": 36,
+        "frequency_pct": 2.3,
+        "weight": 0.56
+      },
+      {
+        "id": 2,
+        "en": "Arrhythm",
+        "he": "",
+        "keywords": [
+          "arrhythm",
+          "atrial fibril",
+          "AFib",
+          "flutter",
+          "SVT",
+          "tachycard",
+          "bradycard",
+          "pacemaker",
+          "ECG",
+          "EKG",
+          "QT",
+          "WPW",
+          "AV block",
+          "amiodarone"
+        ],
+        "n_questions": 34,
+        "frequency_pct": 2.2,
+        "weight": 0.52
+      },
+      {
+        "id": 4,
+        "en": "Hyperten",
+        "he": "",
+        "keywords": [
+          "hyperten",
+          "blood pressure",
+          "HTN",
+          "antihypertens",
+          "amlodipine",
+          "ACEI",
+          "ARB",
+          "baxdrostat",
+          "aldosterone synthase"
+        ],
+        "n_questions": 30,
+        "frequency_pct": 1.9,
+        "weight": 0.46
+      }
+    ]
+  },
+  "Mishpacha": {
+    "repo": "Eiasash/FamilyMedicine",
+    "total_questions_analyzed": 1061,
+    "total_topics": 27,
+    "topics": [
+      {
+        "id": 24,
+        "en": "Peds — Acute & Infections",
+        "he": "ילדים — מחלות חדות וזיהומים",
+        "keywords": [],
+        "n_questions": 115,
+        "frequency_pct": 10.8,
+        "weight": 2.93
+      },
+      {
+        "id": 9,
+        "en": "Rheumatology & Musculoskeletal",
+        "he": "ראומטולוגיה וטרשת שלד-שריר",
+        "keywords": [],
+        "n_questions": 100,
+        "frequency_pct": 9.4,
+        "weight": 2.54
+      },
+      {
+        "id": 26,
+        "en": "EBM, Communication & Family Systems",
+        "he": "רפואה מבוססת ראיות, תקשורת ומערכת משפחתית",
+        "keywords": [],
+        "n_questions": 75,
+        "frequency_pct": 7.1,
+        "weight": 1.91
+      },
+      {
+        "id": 14,
+        "en": "Women's Health & Gynecology",
+        "he": "בריאות האישה וגינקולוגיה",
+        "keywords": [],
+        "n_questions": 68,
+        "frequency_pct": 6.4,
+        "weight": 1.73
+      },
+      {
+        "id": 13,
+        "en": "Infectious Disease & Vaccines (Adult)",
+        "he": "מחלות זיהומיות וחיסונים (מבוגרים)",
+        "keywords": [],
+        "n_questions": 50,
+        "frequency_pct": 4.7,
+        "weight": 1.27
+      },
+      {
+        "id": 17,
+        "en": "Geriatrics (Falls, Cognition, Polypharmacy)",
+        "he": "גריאטריה (נפילות, קוגניציה, ריבוי תרופות)",
+        "keywords": [],
+        "n_questions": 46,
+        "frequency_pct": 4.3,
+        "weight": 1.17
+      },
+      {
+        "id": 15,
+        "en": "Pregnancy, Perinatal & Postpartum",
+        "he": "הריון ולידה",
+        "keywords": [],
+        "n_questions": 42,
+        "frequency_pct": 4.0,
+        "weight": 1.07
+      },
+      {
+        "id": 4,
+        "en": "Gastroenterology & Hepatology",
+        "he": "גסטרו והפטולוגיה",
+        "keywords": [],
+        "n_questions": 41,
+        "frequency_pct": 3.9,
+        "weight": 1.04
+      },
+      {
+        "id": 10,
+        "en": "Neurology (Stroke, Headache, Dementia)",
+        "he": "נוירולוגיה (שבץ, כאבי ראש, דמנציה)",
+        "keywords": [],
+        "n_questions": 41,
+        "frequency_pct": 3.9,
+        "weight": 1.04
+      },
+      {
+        "id": 20,
+        "en": "Preventive Medicine & Health Promotion",
+        "he": "רפואה מונעת וקידום בריאות",
+        "keywords": [],
+        "n_questions": 41,
+        "frequency_pct": 3.9,
+        "weight": 1.04
+      },
+      {
+        "id": 22,
+        "en": "Emergencies in the Clinic",
+        "he": "חירום במרפאה",
+        "keywords": [],
+        "n_questions": 39,
+        "frequency_pct": 3.7,
+        "weight": 0.99
+      },
+      {
+        "id": 3,
+        "en": "Pulmonology (Asthma, COPD, PE)",
+        "he": "ריאות (אסטמה, COPD, תסחיף)",
+        "keywords": [],
+        "n_questions": 38,
+        "frequency_pct": 3.6,
+        "weight": 0.97
+      },
+      {
+        "id": 18,
+        "en": "Mental Health — Mood, Anxiety, Psychosis",
+        "he": "בריאות הנפש — מצב רוח, חרדה, פסיכוזה",
+        "keywords": [],
+        "n_questions": 32,
+        "frequency_pct": 3.0,
+        "weight": 0.81
+      },
+      {
+        "id": 6,
+        "en": "Endocrinology — Diabetes",
+        "he": "אנדוקרינולוגיה — סוכרת",
+        "keywords": [],
+        "n_questions": 31,
+        "frequency_pct": 2.9,
+        "weight": 0.79
+      },
+      {
+        "id": 2,
+        "en": "Hypertension & Lipids",
+        "he": "יתר לחץ דם ודיסליפידמיה",
+        "keywords": [],
+        "n_questions": 29,
+        "frequency_pct": 2.7,
+        "weight": 0.74
+      },
+      {
+        "id": 8,
+        "en": "Hematology & Coagulation",
+        "he": "המטולוגיה וקרישה",
+        "keywords": [],
+        "n_questions": 28,
+        "frequency_pct": 2.6,
+        "weight": 0.71
+      },
+      {
+        "id": 25,
+        "en": "Peds — Adolescent & Mental Health",
+        "he": "ילדים — מתבגרים ובריאות הנפש",
+        "keywords": [],
+        "n_questions": 28,
+        "frequency_pct": 2.6,
+        "weight": 0.71
+      },
+      {
+        "id": 5,
+        "en": "Nephrology, UTI & Urology",
+        "he": "נפרולוגיה, UTI ואורולוגיה",
+        "keywords": [],
+        "n_questions": 27,
+        "frequency_pct": 2.5,
+        "weight": 0.69
+      },
+      {
+        "id": 7,
+        "en": "Endocrinology — Thyroid & Other",
+        "he": "אנדוקרינולוגיה — בלוטת תריס ואחר",
+        "keywords": [],
+        "n_questions": 24,
+        "frequency_pct": 2.3,
+        "weight": 0.61
+      },
+      {
+        "id": 23,
+        "en": "Peds — Newborn & Development",
+        "he": "ילדים — יילוד והתפתחות",
+        "keywords": [],
+        "n_questions": 24,
+        "frequency_pct": 2.3,
+        "weight": 0.61
+      },
+      {
+        "id": 1,
+        "en": "Heart Failure & Valves",
+        "he": "אי-ספיקת לב ומסתמים",
+        "keywords": [],
+        "n_questions": 23,
+        "frequency_pct": 2.2,
+        "weight": 0.59
+      },
+      {
+        "id": 11,
+        "en": "Dermatology",
+        "he": "דרמטולוגיה",
+        "keywords": [],
+        "n_questions": 22,
+        "frequency_pct": 2.1,
+        "weight": 0.56
+      },
+      {
+        "id": 12,
+        "en": "Allergy & Immunology",
+        "he": "אלרגיה ואימונולוגיה",
+        "keywords": [],
+        "n_questions": 21,
+        "frequency_pct": 2.0,
+        "weight": 0.53
+      },
+      {
+        "id": 0,
+        "en": "Adult Cardiology — IHD & Arrhythmia",
+        "he": "קרדיולוגיה למבוגר — מחלת לב איסכמית והפרעות קצב",
+        "keywords": [],
+        "n_questions": 20,
+        "frequency_pct": 1.9,
+        "weight": 0.51
+      },
+      {
+        "id": 16,
+        "en": "Men's Health",
+        "he": "בריאות הגבר",
+        "keywords": [],
+        "n_questions": 20,
+        "frequency_pct": 1.9,
+        "weight": 0.51
+      },
+      {
+        "id": 21,
+        "en": "Pain, Palliative & End-of-Life",
+        "he": "כאב, פליאציה וסוף החיים",
+        "keywords": [],
+        "n_questions": 20,
+        "frequency_pct": 1.9,
+        "weight": 0.51
+      },
+      {
+        "id": 19,
+        "en": "Addictions & Lifestyle Behaviors",
+        "he": "התמכרויות והתנהגות בריאותית",
+        "keywords": [],
+        "n_questions": 16,
+        "frequency_pct": 1.5,
+        "weight": 0.41
+      }
+    ]
+  }
+}
