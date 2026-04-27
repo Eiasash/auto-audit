@@ -40,6 +40,10 @@ Outputs:
 - A GitHub issue in the affected repo, labeled `auto-audit` (and `auto-fix-eligible` if the failure has a known fix template). Idempotent by title within the same day, so a persistent problem doesn't spam.
 - Run summary inline in GitHub Actions UI.
 
+#### Modifying the probe
+
+When changing `scripts/probes/probe_distractor_alignment.py` or its adapter in `scripts/probe.py`, run `python scripts/probes/test_alignment_dispatch.py` before pushing. Exit 0 = ship. Deliberately not in CI — it pulls ~17 MB twice and depends on a known-bad SHA that could be force-pushed away.
+
 ### Tier 2 — `auto-fix.yml`
 
 Manual trigger via Actions UI. Pick:

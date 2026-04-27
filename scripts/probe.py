@@ -36,6 +36,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from probes.probe_distractor_alignment import check_distractor_alignment
+
 # ─────────────────────────── config ────────────────────────────
 
 OWNER = "Eiasash"
@@ -400,6 +402,27 @@ def run() -> dict[str, Any]:
             if ep:
                 repo_report["raw"]["skill_snapshot"] = ep.get("snapshot", ep)
                 repo_report["issues"].extend(ep.get("issues", []))
+
+        # Geri-specific: distractor alignment probe (Tier 1, no token needed).
+        # Returns the new probe schema (severity/title/body/labels/template);
+        # adapt to the existing repo_report["issues"] shape.
+        if repo == "Geriatrics":
+            try:
+                for f in check_distractor_alignment(f"{OWNER}/{repo}"):
+                    sev_map = {"CRITICAL": "critical", "WARN": "warning", "ERROR": "error"}
+                    issue = {
+                        "severity": sev_map.get(f["severity"], "warning"),
+                        "kind": f.get("template") or "distractor-alignment",
+                        "msg": f["title"],
+                    }
+                    if f.get("template"):
+                        issue["auto_fix"] = f["template"]
+                    issue["url"] = (
+                        f"https://github.com/{OWNER}/{repo}/blob/main/data/distractors.json"
+                    )
+                    repo_report["issues"].append(issue)
+            except Exception as e:
+                sys.stderr.write(f"[probe] distractor_alignment failed: {e}\n")
 
         report["repos"][repo] = repo_report
 
