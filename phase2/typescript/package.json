@@ -1,0 +1,31 @@
+{
+  "name": "@eiasash/study-plan",
+  "version": "2.0.0",
+  "description": "Study Plan generator for Israeli medical exams (Phase 2 TypeScript port)",
+  "type": "module",
+  "main": "studyPlan.js",
+  "types": "types.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "ts-node test-study-plan.ts",
+    "lint": "eslint *.ts"
+  },
+  "keywords": [
+    "medical",
+    "exam",
+    "study-plan",
+    "geriatrics",
+    "family-medicine",
+    "internal-medicine"
+  ],
+  "author": "Eias",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.39",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  }
+}
