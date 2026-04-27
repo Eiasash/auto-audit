@@ -1,0 +1,32 @@
+name: Spend alarm
+
+# Daily check at 09:00 UTC. Opens or comments an issue if projected
+# month-end Anthropic spend on the Toranot proxy exceeds threshold.
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+    inputs:
+      threshold_usd:
+        description: "Override threshold in USD (default 250)"
+        required: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run spend alarm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          THRESHOLD_USD: ${{ inputs.threshold_usd || '250' }}
+          REPO: ${{ github.repository }}
+        run: python scripts/spend_alarm.py
