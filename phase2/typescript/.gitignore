@@ -1,0 +1,13 @@
+# Node modules
+node_modules/
+
+# Build artifacts
+dist/
+*.js.map
+
+# Test output
+test-output-*.md
+test-output-*.ics
+
+# TypeScript cache
+*.tsbuildinfo
