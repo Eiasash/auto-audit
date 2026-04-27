@@ -1,92 +1,113 @@
 #!/usr/bin/env python3
 """
-refresh_syllabus_data.py — pull topics + questions + display names from all
-3 PWAs and rebuild syllabus_data.json with clean en/he labels.
+refresh_syllabus_data.py — pull topics.json + questions.json from all 3 PWAs,
+merge with the topic_names.json overlay (clean en/he names for Geri/Pnimit
+that the PWA repos themselves don't carry), compute per-topic empirical
+frequency, write syllabus_data.json.
 
-DISPLAY NAME SOURCES (verified 2026-04-27):
-    Geri      → Eiasash/Geriatrics/shlav-a-mega.html  →  const TOPICS=[...]
-    Pnimit    → Eiasash/InternalMedicine/src/core/constants.js  →  export const TOPICS=[...]
-    Mishpacha → Eiasash/FamilyMedicine/data/topics.json  →  [{en, he}]
-
-Hebrew names for Geri are bundled in this script (curated against the keyword
-arrays in data/topics.json, lined up by index). Edit GERI_HE if you want to
-adjust them. For Pnimit, Hebrew is left blank — if you want Hebrew for Pnimit
-later, add a similar PNIMIT_HE list.
+Run periodically (after big question additions, or after curating new
+topic names in topic_names.json) to keep the study plan generator's
+weights and display names current.
 
 Env:
-    GITHUB_PAT — read access to all 3 repos
+    GITHUB_PAT — read access to Eiasash/{Geriatrics, InternalMedicine, FamilyMedicine}
+
+Output:
+    syllabus_data.json (sibling of generate_study_plan.py)
+
+Overlay file:
+    topic_names.json (sibling) — see its _README for rationale.
+    Mishpacha is skipped — its data/topics.json already has {en, he}.
+    For Geri and Pnimit, overlay names take priority over the keyword-derived
+    fallback. Missing entries fall back to keyword-derived "title-cased first stem".
 """
 
 from __future__ import annotations
-import json, os, re, sys, urllib.request
+import json, os, sys, urllib.request
 from collections import Counter
 
 GH_API = "https://api.github.com"
-DATA_FILE = os.path.join(os.path.dirname(__file__), "syllabus_data.json")
-
-# ── Curated Hebrew names for Geri (46) ────────────────────────────────────
-GERI_HE = [
-    "ביולוגיה של ההזדקנות", "דמוגרפיה", "הערכה גריאטרית כוללת", "שבריריות",
-    "נפילות", "דליריום", "דמנציה", "דיכאון", "ריבוי תרופות", "תזונה",
-    "פצעי לחץ", "אי-נקיטה", "עצירות", "שינה", "כאב", "אוסטאופורוזיס",
-    "אוסטאוארטריטיס", "מחלות לב וכלי דם", "אי ספיקת לב", "יתר לחץ דם",
-    "שבץ מוחי", "מחלת ריאות חסימתית כרונית", "סוכרת", "בלוטת התריס",
-    "אי-ספיקת כליות כרונית", "אנמיה", "סרטן", "זיהומים", "טיפול פליאטיבי",
-    "אתיקה", "התעללות בקשישים", "נהיגה", "אפוטרופסות וייפוי כוח",
-    "זכויות החולה", "הנחיות מקדימות", "קהילה וטיפול ארוך-טווח", "שיקום",
-    "ראייה ושמיעה", "טיפול פריאופרטיבי", "רפואה דחופה גריאטרית",
-    "מחלת פרקינסון", "הפרעות קצב", "הפרעות בליעה", "אנדרופאוזה",
-    "מניעה וקידום בריאות", "טיפול בין-תחומי",
-]
+APPS = {
+    "Geri":      "Geriatrics",
+    "Pnimit":    "InternalMedicine",
+    "Mishpacha": "FamilyMedicine",
+}
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(SCRIPT_DIR, "syllabus_data.json")
+OVERLAY_FILE = os.path.join(SCRIPT_DIR, "topic_names.json")
 
 
 def gh_raw(repo: str, path: str, pat: str) -> bytes:
     req = urllib.request.Request(
         f"{GH_API}/repos/Eiasash/{repo}/contents/{path}",
-        headers={"Authorization": f"Bearer {pat}",
-                 "Accept": "application/vnd.github.v3.raw"},
+        headers={
+            "Authorization": f"Bearer {pat}",
+            "Accept": "application/vnd.github.v3.raw",
+        },
     )
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read()
 
 
-def extract_geri_topics(pat):
-    html = gh_raw("Geriatrics", "shlav-a-mega.html", pat).decode()
-    m = re.search(r'const TOPICS=(\[[^\]]+\]);', html)
-    if not m:
-        raise RuntimeError("Geri TOPICS const not found in shlav-a-mega.html")
-    return json.loads(m.group(1))
+def load_overlay():
+    if not os.path.exists(OVERLAY_FILE):
+        return {}
+    with open(OVERLAY_FILE, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+    out = {}
+    for app, entries in raw.items():
+        if app.startswith("_"):
+            continue
+        idx = {}
+        for e in entries:
+            idx[e["id"]] = {"en": e.get("en", ""), "he": e.get("he", "")}
+        out[app] = idx
+    return out
 
 
-def extract_pnimit_topics(pat):
-    src = gh_raw("InternalMedicine", "src/core/constants.js", pat).decode()
-    m = re.search(r"export const TOPICS\s*=\s*(\[[^\]]+\]);", src)
-    if not m:
-        raise RuntimeError("Pnimit TOPICS export not found in src/core/constants.js")
-    return json.loads(m.group(1).replace("'", '"'))
+def build_topic_records(label, topics_raw, questions_raw, overlay):
+    topics = json.loads(topics_raw)
+    qs = json.loads(questions_raw)
+    counter = Counter(q.get("ti") for q in qs if "ti" in q)
+    app_overlay = overlay.get(label, {})
 
-
-def build_records(en_names, he_names, keyword_arrays, questions):
-    counter = Counter(q.get("ti") for q in questions if "ti" in q)
     records = []
-    for i, en in enumerate(en_names):
-        kws = keyword_arrays[i] if i < len(keyword_arrays) else []
-        if isinstance(kws, dict):
-            kws = []
+    for i, t in enumerate(topics):
+        # Source 1: native repo dict (Mishpacha pattern)
+        if isinstance(t, dict):
+            name_en = t.get("en") or f"Topic {t.get('id', i)}"
+            name_he = t.get("he", "")
+            keywords = []
+        else:
+            # Source 2: overlay (Geri/Pnimit clean names)
+            ov = app_overlay.get(i)
+            if ov and ov.get("en"):
+                name_en = ov["en"]
+                name_he = ov.get("he", "")
+            else:
+                # Source 3: fallback — title-case the first keyword stem
+                name_en = (t[0] if t else f"Topic {i}").title()
+                name_he = ""
+            keywords = list(t)
+
         n = counter.get(i, 0)
         records.append({
-            "id": i,
-            "en": en,
-            "he": he_names[i] if i < len(he_names) else "",
-            "keywords": kws if isinstance(kws, list) else [],
-            "n_questions": n,
+            "id": i, "en": name_en, "he": name_he,
+            "keywords": keywords, "n_questions": n,
         })
-    total = sum(r["n_questions"] for r in records) or 1
-    for r in records:
-        r["frequency_pct"] = round(r["n_questions"] / total * 100, 1)
-        r["weight"] = round(r["n_questions"] / (total / len(records)), 2)
+
+    total = sum(r["n_questions"] for r in records)
+    if total == 0:
+        for r in records:
+            r["frequency_pct"] = round(100 / len(records), 1)
+            r["weight"] = 1.0
+    else:
+        for r in records:
+            pct = r["n_questions"] / total * 100
+            r["frequency_pct"] = round(pct, 1)
+            r["weight"] = round(r["n_questions"] / (total / len(records)), 2)
     records.sort(key=lambda r: -r["n_questions"])
-    return records
+    return records, len(qs)
 
 
 def main():
@@ -94,50 +115,28 @@ def main():
     if not pat:
         sys.exit("GITHUB_PAT env var required (read access to Eiasash repos)")
 
+    overlay = load_overlay()
+    if overlay:
+        print(f"  loaded overlay: {sum(len(v) for v in overlay.values())} curated names "
+              f"across {list(overlay.keys())}")
+    else:
+        print("  no overlay file — Geri/Pnimit will use keyword-derived fallback names")
+
     out = {}
-
-    # ── GERI ──────────────────────────────────────────────────────────
-    print("  fetching Geriatrics …")
-    geri_keywords = json.loads(gh_raw("Geriatrics", "data/topics.json", pat))
-    geri_questions = json.loads(gh_raw("Geriatrics", "data/questions.json", pat))
-    geri_en = extract_geri_topics(pat)
-    if len(geri_en) != len(geri_keywords):
-        print(f"  ⚠ Geri: TOPICS const has {len(geri_en)} but data/topics.json has {len(geri_keywords)} — using HTML count")
-    he = GERI_HE if len(GERI_HE) == len(geri_en) else [""] * len(geri_en)
-    out["Geri"] = {
-        "repo": "Eiasash/Geriatrics",
-        "total_questions_analyzed": len(geri_questions),
-        "total_topics": len(geri_en),
-        "topics": build_records(geri_en, he, geri_keywords, geri_questions),
-    }
-    print(f"    -> {len(geri_questions)} Qs, {len(geri_en)} topics")
-
-    # ── PNIMIT ────────────────────────────────────────────────────────
-    print("  fetching InternalMedicine …")
-    pnimit_keywords = json.loads(gh_raw("InternalMedicine", "data/topics.json", pat))
-    pnimit_questions = json.loads(gh_raw("InternalMedicine", "data/questions.json", pat))
-    pnimit_en = extract_pnimit_topics(pat)
-    out["Pnimit"] = {
-        "repo": "Eiasash/InternalMedicine",
-        "total_questions_analyzed": len(pnimit_questions),
-        "total_topics": len(pnimit_en),
-        "topics": build_records(pnimit_en, [""] * len(pnimit_en), pnimit_keywords, pnimit_questions),
-    }
-    print(f"    -> {len(pnimit_questions)} Qs, {len(pnimit_en)} topics")
-
-    # ── MISHPACHA ─────────────────────────────────────────────────────
-    print("  fetching FamilyMedicine …")
-    misha_topics = json.loads(gh_raw("FamilyMedicine", "data/topics.json", pat))
-    misha_questions = json.loads(gh_raw("FamilyMedicine", "data/questions.json", pat))
-    misha_en = [t.get("en", "") for t in misha_topics]
-    misha_he = [t.get("he", "") for t in misha_topics]
-    out["Mishpacha"] = {
-        "repo": "Eiasash/FamilyMedicine",
-        "total_questions_analyzed": len(misha_questions),
-        "total_topics": len(misha_en),
-        "topics": build_records(misha_en, misha_he, [[]] * len(misha_en), misha_questions),
-    }
-    print(f"    -> {len(misha_questions)} Qs, {len(misha_en)} topics")
+    for label, repo in APPS.items():
+        print(f"  fetching {repo}/data/topics.json + questions.json …")
+        topics_raw = gh_raw(repo, "data/topics.json", pat)
+        questions_raw = gh_raw(repo, "data/questions.json", pat)
+        records, n_qs = build_topic_records(label, topics_raw, questions_raw, overlay)
+        out[label] = {
+            "repo": f"Eiasash/{repo}",
+            "total_questions_analyzed": n_qs,
+            "total_topics": len(records),
+            "topics": records,
+        }
+        unnamed = [r for r in records if not r["en"] or r["en"].startswith("Topic ")]
+        marker = "✓" if not unnamed else f"⚠ {len(unnamed)} unnamed"
+        print(f"    -> {n_qs} questions, {len(records)} topics {marker}")
 
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, indent=2)
