@@ -111,9 +111,24 @@ REPO_CONFIG: dict[str, dict[str, Any]] = {
 
 GH_TOKEN = os.environ.get("GH_TOKEN", "").strip()
 DRY_RUN  = os.environ.get("DRY_RUN", "0") == "1"
+# Auto-dispatch is on by default. Set AUTO_DISPATCH_DISABLED=1 in the workflow
+# env (or a repo secret/variable surfaced as env) to revert to manual-click
+# behaviour without code changes.
+AUTO_DISPATCH_DISABLED = os.environ.get("AUTO_DISPATCH_DISABLED", "0") == "1"
 REPORT_DIR = Path(os.environ.get("REPORT_DIR", "health-reports"))
 
 USER_AGENT = "Eiasash-auto-audit/1.0"
+
+# Map of auto_fix template name → (workflow filename in this repo, dispatch ref).
+# A template is only auto-dispatched if it's in this allowlist. Anything else
+# stays as a labeled issue waiting for manual workflow_dispatch — the safe
+# default for new fix templates that haven't earned trust yet.
+AUTO_DISPATCH_TEMPLATES: dict[str, tuple[str, str]] = {
+    "regenerate_misaligned_distractors": (
+        "regenerate-misaligned-distractors.yml",
+        "main",
+    ),
+}
 
 
 def _http_json(url: str, *, headers: Optional[dict] = None, body: Optional[bytes] = None,
@@ -182,6 +197,41 @@ def gh(path: str, **kw) -> tuple[int, Any]:
         kw["body"] = json.dumps(kw["body"]).encode("utf-8")
         headers.setdefault("Content-Type", "application/json")
     return _http_json(f"https://api.github.com{path}", headers=headers, **kw)
+
+
+def auto_audit_workflow_running(workflow_filename: str) -> bool:
+    """Return True if `workflow_filename` is queued or in_progress on this repo.
+
+    Used as the idempotency check before auto-dispatch. The Tier 1 cron runs
+    every 30 min; a real distractor regeneration takes 30–60 min. Without
+    this guard the second cron tick would happily fire a duplicate run.
+    """
+    for status in ("in_progress", "queued"):
+        sc, data = gh(
+            f"/repos/{OWNER}/auto-audit/actions/workflows/"
+            f"{workflow_filename}/runs?status={status}&per_page=5"
+        )
+        if sc == 200 and isinstance(data, dict) and data.get("total_count", 0) > 0:
+            return True
+    return False
+
+
+def dispatch_auto_audit_workflow(
+    workflow_filename: str, inputs: dict[str, str], ref: str = "main"
+) -> bool:
+    """Trigger workflow_dispatch on `workflow_filename` in this repo.
+
+    Returns True on a 204 from GitHub. Caller is responsible for the
+    idempotency check; this function is a thin shim.
+    Requires PAT with Actions: Read & write on Eiasash/auto-audit.
+    """
+    sc, _ = gh(
+        f"/repos/{OWNER}/auto-audit/actions/workflows/"
+        f"{workflow_filename}/dispatches",
+        method="POST",
+        body={"ref": ref, "inputs": inputs},
+    )
+    return sc in (204, 200)
 
 
 # ─────────────────────────── probes ────────────────────────────
@@ -518,6 +568,7 @@ def main() -> int:
     print(md)
 
     # Per-repo issue creation
+    dispatched: list[tuple[str, str, int, bool]] = []  # (repo, template, issue#, ok)
     if not DRY_RUN:
         for repo, r in report["repos"].items():
             crits = [i for i in r["issues"] if i["severity"] == "critical"]
@@ -555,7 +606,91 @@ def main() -> int:
             labels = ["auto-audit"]
             if auto_fixable:
                 labels.append("auto-fix-eligible")
-            file_issue(repo, title, "\n".join(body_lines), labels)
+            issue_num = file_issue(repo, title, "\n".join(body_lines), labels)
+
+            # Auto-dispatch known auto-fix templates.
+            # Only templates listed in AUTO_DISPATCH_TEMPLATES are eligible —
+            # anything else stays manual until it's earned trust.
+            # One dispatch per probe cycle per repo (the workflow itself is
+            # idempotent re: duplicate runs via auto_audit_workflow_running).
+            if issue_num is not None and not AUTO_DISPATCH_DISABLED:
+                for crit in crits:
+                    template = crit.get("auto_fix")
+                    if template not in AUTO_DISPATCH_TEMPLATES:
+                        continue
+                    wf_file, wf_ref = AUTO_DISPATCH_TEMPLATES[template]
+                    if auto_audit_workflow_running(wf_file):
+                        sys.stderr.write(
+                            f"[auto-dispatch] {wf_file} already running; "
+                            f"skipping for {repo}#{issue_num}\n"
+                        )
+                        # Leave a comment so the issue thread reflects the
+                        # decision (no spam — file_issue is idempotent).
+                        gh(
+                            f"/repos/{OWNER}/{repo}/issues/{issue_num}/comments",
+                            method="POST",
+                            body={
+                                "body": (
+                                    f"⏳ Auto-dispatch skipped for `{template}`: "
+                                    f"workflow `{wf_file}` is already running on "
+                                    f"`Eiasash/auto-audit`. The earlier run will "
+                                    f"close this. (Set `AUTO_DISPATCH_DISABLED=1` "
+                                    f"in the cron env to revert to manual.)"
+                                )
+                            },
+                        )
+                        dispatched.append((repo, template, issue_num, False))
+                        break
+                    ok = dispatch_auto_audit_workflow(
+                        wf_file,
+                        inputs={"issue_number": str(issue_num)},
+                        ref=wf_ref,
+                    )
+                    sys.stderr.write(
+                        f"[auto-dispatch] {wf_file} dispatched={ok} "
+                        f"for {repo}#{issue_num} (template={template})\n"
+                    )
+                    dispatched.append((repo, template, issue_num, ok))
+                    if ok:
+                        gh(
+                            f"/repos/{OWNER}/{repo}/issues/{issue_num}/comments",
+                            method="POST",
+                            body={
+                                "body": (
+                                    f"🤖 Auto-dispatched `{template}` "
+                                    f"(`Eiasash/auto-audit/.github/workflows/{wf_file}`).\n\n"
+                                    f"The workflow will open a PR back to this repo "
+                                    f"in 30–60 min. Track it at "
+                                    f"https://github.com/{OWNER}/auto-audit/actions/"
+                                    f"workflows/{wf_file}.\n\n"
+                                    f"Set `AUTO_DISPATCH_DISABLED=1` in the cron env "
+                                    f"to revert to manual click-to-fix."
+                                )
+                            },
+                        )
+                    else:
+                        gh(
+                            f"/repos/{OWNER}/{repo}/issues/{issue_num}/comments",
+                            method="POST",
+                            body={
+                                "body": (
+                                    f"⚠️ Auto-dispatch FAILED for `{template}` → "
+                                    f"`{wf_file}`. The PAT may be missing "
+                                    f"`Actions: Read & write` on `Eiasash/auto-audit`, "
+                                    f"or the workflow file is missing. Run it "
+                                    f"manually: https://github.com/{OWNER}/auto-audit/"
+                                    f"actions/workflows/{wf_file}"
+                                )
+                            },
+                        )
+                    break  # one auto-dispatch per repo per cycle is plenty
+
+    # Surface dispatch decisions in the run log so the GH summary shows them.
+    if dispatched:
+        sys.stderr.write("[auto-dispatch] summary:\n")
+        for repo, template, num, ok in dispatched:
+            mark = "✓" if ok else "✗"
+            sys.stderr.write(f"  {mark} {repo}#{num} → {template}\n")
 
     # Decide exit code based on severity (non-zero so the workflow run is RED visibly)
     any_critical = any(i["severity"] == "critical" for r in report["repos"].values() for i in r["issues"])

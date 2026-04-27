@@ -18,7 +18,7 @@ Repository permissions:
 | Contents | Read and write | Push auto-fix branches |
 | Pull requests | Read and write | Open auto-fix PRs |
 | Issues | Read and write | Open/comment/close auto-audit issues |
-| Actions | Read and write | Re-trigger repaired workflows |
+| Actions | Read and write | Tier 1 auto-dispatch + re-trigger repaired workflows |
 | Metadata | Read-only | (auto-included) |
 
 ## Click-by-click
