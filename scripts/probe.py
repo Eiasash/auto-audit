@@ -117,6 +117,12 @@ DRY_RUN  = os.environ.get("DRY_RUN", "0") == "1"
 AUTO_DISPATCH_DISABLED = os.environ.get("AUTO_DISPATCH_DISABLED", "0") == "1"
 REPORT_DIR = Path(os.environ.get("REPORT_DIR", "health-reports"))
 
+# Call-count delta alarm thresholds (30-min intervals, matches health-check.yml cron)
+CALL_COUNT_WARN_DELTA = 500   # WARN: >500 calls in 30 min (~17/min)
+CALL_COUNT_CRIT_DELTA = 2000  # CRIT: >2000 calls in 30 min (~67/min)
+# Suppression flag for legitimate bulk-gen events
+BULK_GEN_ACTIVE = os.environ.get("BULK_GEN_ACTIVE", "0") == "1"
+
 USER_AGENT = "Eiasash-auto-audit/1.0"
 
 # Map of auto_fix template name → (workflow filename in this repo, dispatch ref).
@@ -382,6 +388,116 @@ def probe_endpoint(name: str, url: str) -> dict[str, Any]:
             if k in data
         }
     return out
+
+
+def probe_call_count_delta(token_usage: dict[str, Any]) -> list[dict[str, Any]]:
+    """Check call-count delta against previous run to detect runaway loops.
+
+    Reads from /health-reports/.last_call_count.json, compares against current,
+    writes new state back. Alarms if delta > thresholds in 30min window.
+
+    Args:
+        token_usage: The tokenUsage dict from Toranot skill_snapshot endpoint
+
+    Returns:
+        List of issues (severity: warning or critical)
+    """
+    issues: list[dict[str, Any]] = []
+
+    # Extract current call count
+    current_month_totals = token_usage.get("currentMonthTotals", {})
+    current_call_count = current_month_totals.get("call_count", 0)
+    current_month = token_usage.get("currentMonth", "")
+
+    if not current_call_count:
+        sys.stderr.write("[call-count-delta] No call_count in tokenUsage, skipping\n")
+        return issues
+
+    # State file path
+    state_file = REPORT_DIR / ".last_call_count.json"
+
+    # Load previous state
+    previous_call_count = None
+    previous_month = None
+    if state_file.exists():
+        try:
+            with open(state_file) as f:
+                state = json.load(f)
+                previous_call_count = state.get("call_count")
+                previous_month = state.get("month")
+        except Exception as e:
+            sys.stderr.write(f"[call-count-delta] Failed to load state: {e}\n")
+
+    # Write current state (always update, even on first run or month boundary)
+    try:
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(state_file, "w") as f:
+            json.dump({
+                "call_count": current_call_count,
+                "month": current_month,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }, f, indent=2)
+    except Exception as e:
+        sys.stderr.write(f"[call-count-delta] Failed to save state: {e}\n")
+
+    # First run or no previous data
+    if previous_call_count is None:
+        sys.stderr.write(f"[call-count-delta] First run, baseline set to {current_call_count}\n")
+        return issues
+
+    # Month boundary crossed — reset baseline, don't alarm
+    if previous_month and previous_month != current_month:
+        sys.stderr.write(
+            f"[call-count-delta] Month boundary crossed ({previous_month} → {current_month}), "
+            f"resetting baseline\n"
+        )
+        return issues
+
+    # Compute delta
+    delta = current_call_count - previous_call_count
+    sys.stderr.write(
+        f"[call-count-delta] {previous_call_count} → {current_call_count} "
+        f"(Δ={delta} in ~30min)\n"
+    )
+
+    # Check thresholds
+    if delta > CALL_COUNT_CRIT_DELTA:
+        severity = "critical"
+        labels_hint = "auto-audit + priority/high"
+        rate = delta / 30  # calls per minute
+        issues.append({
+            "severity": severity,
+            "kind": "call_count_runaway_loop",
+            "msg": (
+                f"CRITICAL: {delta} calls in ~30min ({rate:.1f}/min) exceeds "
+                f"threshold {CALL_COUNT_CRIT_DELTA}. Possible runaway loop."
+            ),
+            "delta": delta,
+            "labels_hint": labels_hint,
+        })
+    elif delta > CALL_COUNT_WARN_DELTA:
+        severity = "warning"
+        labels_hint = "auto-audit"
+        rate = delta / 30
+        issues.append({
+            "severity": severity,
+            "kind": "call_count_elevated",
+            "msg": (
+                f"WARNING: {delta} calls in ~30min ({rate:.1f}/min) exceeds "
+                f"threshold {CALL_COUNT_WARN_DELTA}. Monitor for continuation."
+            ),
+            "delta": delta,
+            "labels_hint": labels_hint,
+        })
+
+    # Suppression for bulk-gen events
+    if issues and BULK_GEN_ACTIVE:
+        sys.stderr.write(
+            f"[call-count-delta] BULK_GEN_ACTIVE=1, suppressing {len(issues)} alarm(s)\n"
+        )
+        return []
+
+    return issues
 
 
 def probe_sibling_drift() -> list[dict[str, Any]]:
@@ -690,6 +806,12 @@ def run() -> dict[str, Any]:
                 repo_report["raw"]["skill_snapshot"] = ep.get("snapshot", ep)
                 repo_report["issues"].extend(ep.get("issues", []))
 
+                # Toranot-specific: call-count delta alarm (runaway-loop early warning)
+                if repo == "Toranot" and ep.get("snapshot", {}).get("tokenUsage"):
+                    token_usage = ep["snapshot"]["tokenUsage"]
+                    call_count_issues = probe_call_count_delta(token_usage)
+                    repo_report["issues"].extend(call_count_issues)
+
         # Geri-specific: distractor alignment probe (Tier 1, no token needed).
         # Returns the new probe schema (severity/title/body/labels/template);
         # adapt to the existing repo_report["issues"] shape.
@@ -830,7 +952,59 @@ def main() -> int:
     dispatched: list[tuple[str, str, int, bool]] = []  # (repo, template, issue#, ok)
     if not DRY_RUN:
         for repo, r in report["repos"].items():
-            crits = [i for i in r["issues"] if i["severity"] == "critical"]
+            # Special handling for call-count-delta alarms (both warning and critical)
+            # These open dedicated issues separate from the general critical-findings issue
+            call_count_issues = [i for i in r["issues"]
+                                if i.get("kind") in ("call_count_runaway_loop", "call_count_elevated")]
+            if call_count_issues:
+                for issue in call_count_issues:
+                    delta = issue.get("delta", 0)
+                    severity = issue.get("severity", "warning")
+                    title_prefix = "CRITICAL" if severity == "critical" else "WARNING"
+                    title = f"[call-count-alarm] {title_prefix}: {delta} calls in 30min — {report['generated_at'][:10]}"
+
+                    body_lines = [
+                        f"_Auto-generated by `Eiasash/auto-audit` call-count-delta probe at {report['generated_at']}._",
+                        "",
+                        "## Alert",
+                        "",
+                        f"- {issue['msg']}",
+                        "",
+                        "## Context",
+                        "",
+                        f"- **Delta**: {delta} calls in ~30 minutes",
+                        f"- **Rate**: ~{delta/30:.1f} calls/minute",
+                        f"- **Threshold**: {'CRIT' if severity == 'critical' else 'WARN'} at {CALL_COUNT_CRIT_DELTA if severity == 'critical' else CALL_COUNT_WARN_DELTA} calls/30min",
+                        "",
+                        "## Possible causes",
+                        "",
+                        "- **Runaway loop**: Auth-failure retry storm, malformed-JSON re-prompt loop",
+                        "- **Bulk-gen event**: Legitimate distractor regeneration (check recent commits to PWA repos)",
+                        "- **Spike in legitimate usage**: Multiple users hitting the proxy simultaneously",
+                        "",
+                        "## Investigate",
+                        "",
+                        "- [ ] Check `/api/self-audit` for recent error patterns",
+                        "- [ ] Check Anthropic console for abuse/rate-limit warnings",
+                        "- [ ] Review recent commits to PWA repos for bulk-gen triggers",
+                        "- [ ] If legitimate bulk-gen, set `BULK_GEN_ACTIVE=1` repo variable to suppress future alarms",
+                        "- [ ] If confirmed runaway, investigate and fix the loop; consider rotating proxy secret",
+                        "",
+                        "## Suppression",
+                        "",
+                        "To suppress this alarm during legitimate bulk-gen events, set the `BULK_GEN_ACTIVE` "
+                        "repository variable to `1` at https://github.com/Eiasash/auto-audit/settings/variables/actions",
+                    ]
+
+                    labels = ["auto-audit", "call-count-alarm"]
+                    if severity == "critical":
+                        labels.extend(["auto-fix-eligible", "priority/high"])
+
+                    file_issue(repo, title, "\n".join(body_lines), labels)
+
+            # Standard critical issue handling
+            crits = [i for i in r["issues"] if i["severity"] == "critical"
+                     and i.get("kind") not in ("call_count_runaway_loop", "call_count_elevated")]
             if not crits:
                 continue
             title = f"[auto-audit] {len(crits)} critical issue(s) — {report['generated_at'][:10]}"
