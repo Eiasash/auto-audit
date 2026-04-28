@@ -33,6 +33,7 @@ Every 30 minutes, the probe:
 4. Pulls the latest `CI` and `Deploy to GitHub Pages` workflow runs on `main`. Any `failure` is critical.
 5. Hits Toranot's `/self-audit` and `watch-advisor2`'s `/skill-snapshot` endpoints. Non-200 or `status != HEALTHY` is a warning.
 6. Hashes `shared/fsrs.js` and `harrison_chapters.json` across the three medical PWAs. Any divergence is a warning.
+7. **Smoke-tests the shared `study_plan_get` RPC** for each app's documented `APP_KEY` (`geri` / `pnimit` / `mishpacha`) using a sentinel username. `{ok:false, error:'invalid_app'}` from the server is critical (whitelist drift). Catches the class of bug that surfaced 2026-04-28 (Geri v10.46.0 sent `'shlav'`, server rejected, user saw `invalid_app ✗` despite HTTP 200). Cross-cutting critical findings open ONE issue in `auto-audit` itself, not N copies in N repos.
 
 Outputs:
 

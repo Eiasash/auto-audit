@@ -416,6 +416,19 @@ STUDY_PLAN_SYLLABUS_PATHS: dict[str, str] = {
     "Geriatrics":       "data/syllabus_data.json",
 }
 
+# Shared Supabase project (krmlzwwelqvlfslwltol) — used by the RPC smoke probe
+# below. The publishable (anon) key is already embedded in every PWA's client
+# source, so it's safe to hard-code; the RPC layer (SECURITY DEFINER + RLS
+# zero-policies on the underlying table) is what enforces access.
+STUDY_PLAN_SUPABASE_URL = "https://krmlzwwelqvlfslwltol.supabase.co"
+STUDY_PLAN_SUPABASE_KEY = "sb_publishable_tUuqQQ8RKMvLDwTz5cKkOg_o_y-rHtw"
+# RPC server whitelist — must stay in sync with study_plan_upsert/get's
+# `IF p_app NOT IN (...)`. If the server adds a fourth app, append here too.
+STUDY_PLAN_RPC_APPS: tuple[str, ...] = ("geri", "pnimit", "mishpacha")
+# Sentinel username — must NEVER match a real user. NOT_FOUND is the
+# expected happy-path branch on study_plan_get for a non-existent user.
+STUDY_PLAN_RPC_SENTINEL = "__auto_audit_healthcheck__"
+
 
 def probe_study_plan_parity() -> list[dict[str, Any]]:
     """Verify the three medical PWAs ship byte-identical syllabus_data.json.
@@ -469,6 +482,164 @@ def probe_study_plan_parity() -> list[dict[str, Any]]:
     return issues
 
 
+def probe_study_plan_rpc() -> list[dict[str, Any]]:
+    """Smoke-test the study_plan_get RPC for each app's documented APP_KEY.
+
+    Calls study_plan_get with a sentinel username (no real user) and the
+    APP_KEY each PWA's client claims to send. Any failure here means the
+    server-side validation drifted away from the contract — exactly the
+    class of bug that surfaced 2026-04-28 (Geri v10.46.0 sent 'shlav',
+    server whitelist was ('geri','pnimit','mishpacha'), client got
+    `{ok:false, error:'invalid_app'}` despite HTTP 200, and the user saw
+    'invalid_app ✗' under the create-plan button).
+
+    Happy path on a non-existent user: `{ok:true, plan:null}`.
+
+    Detected drift modes:
+      - HTTP non-200                    → critical (auth wedge / RPC gone)
+      - {ok:false, error:'invalid_app'} → critical (RPC whitelist drift)
+      - {ok:false, error:'invalid_username'} → warning (validator changed)
+      - {ok:false, error:<other>}       → warning (db_error etc.)
+      - body shape unexpected           → warning
+      - network timeout / DNS           → warning
+
+    The client-side mirror of this contract (each PWA's APP_KEY constant) is
+    locked by appIntegrity.test.js / regressionGuards.test.js per repo —
+    so the probe specifically catches *server*-side drift (whitelist edits
+    in a future migration, RPC permission breakage, project outage).
+    """
+    issues: list[dict[str, Any]] = []
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + "/rest/v1/rpc/study_plan_get"
+
+    for app_key in STUDY_PLAN_RPC_APPS:
+        body = json.dumps({
+            "p_username": STUDY_PLAN_RPC_SENTINEL,
+            "p_app": app_key,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "apikey": STUDY_PLAN_SUPABASE_KEY,
+                "Authorization": f"Bearer {STUDY_PLAN_SUPABASE_KEY}",
+                "User-Agent": USER_AGENT,
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                status = resp.getcode()
+                raw = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            issues.append({
+                "severity": "critical",
+                "kind": "study_plan_rpc_http_error",
+                "msg": (
+                    f"study_plan_get(p_app='{app_key}') returned HTTP {e.code} — "
+                    f"RPC unreachable or permissions broken."
+                ),
+            })
+            continue
+        except (urllib.error.URLError, TimeoutError) as e:
+            issues.append({
+                "severity": "warning",
+                "kind": "study_plan_rpc_network",
+                "msg": f"study_plan_get(p_app='{app_key}') network error: {e}",
+            })
+            continue
+        except Exception as e:  # pragma: no cover — belt and suspenders
+            issues.append({
+                "severity": "warning",
+                "kind": "study_plan_rpc_unexpected",
+                "msg": f"study_plan_get(p_app='{app_key}') unexpected error: {e}",
+            })
+            continue
+
+        if status != 200:
+            issues.append({
+                "severity": "critical",
+                "kind": "study_plan_rpc_http_error",
+                "msg": f"study_plan_get(p_app='{app_key}') returned HTTP {status}.",
+            })
+            continue
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            issues.append({
+                "severity": "warning",
+                "kind": "study_plan_rpc_bad_json",
+                "msg": (
+                    f"study_plan_get(p_app='{app_key}') returned non-JSON body "
+                    f"({raw[:120]!r})."
+                ),
+            })
+            continue
+
+        if not isinstance(payload, dict):
+            issues.append({
+                "severity": "warning",
+                "kind": "study_plan_rpc_bad_shape",
+                "msg": (
+                    f"study_plan_get(p_app='{app_key}') returned non-object "
+                    f"payload: {payload!r}."
+                ),
+            })
+            continue
+
+        if payload.get("ok") is True:
+            # Sentinel user → expect plan:null. plan:<obj> would mean somebody
+            # actually created a plan with the sentinel username — note it
+            # so we can clean up, but don't fail the probe.
+            if payload.get("plan") is not None:
+                issues.append({
+                    "severity": "warning",
+                    "kind": "study_plan_rpc_sentinel_polluted",
+                    "msg": (
+                        f"Sentinel username '{STUDY_PLAN_RPC_SENTINEL}' has a "
+                        f"saved plan for app='{app_key}'. Delete it from "
+                        f"public.study_plans to keep the probe a true smoke test."
+                    ),
+                })
+            continue  # ok:true is the happy path
+
+        err = payload.get("error", "<missing>")
+        if err == "invalid_app":
+            issues.append({
+                "severity": "critical",
+                "kind": "study_plan_rpc_whitelist_drift",
+                "msg": (
+                    f"study_plan_get rejected p_app='{app_key}' as invalid_app. "
+                    f"Server whitelist no longer matches the documented set "
+                    f"{STUDY_PLAN_RPC_APPS}. Check the latest migration on "
+                    f"public.study_plan_get / study_plan_upsert."
+                ),
+            })
+        elif err == "invalid_username":
+            issues.append({
+                "severity": "warning",
+                "kind": "study_plan_rpc_username_validator_changed",
+                "msg": (
+                    f"study_plan_get rejected the sentinel username "
+                    f"'{STUDY_PLAN_RPC_SENTINEL}' as invalid_username. "
+                    f"Username validator likely tightened — update the probe "
+                    f"sentinel to match the new format."
+                ),
+            })
+        else:
+            issues.append({
+                "severity": "warning",
+                "kind": "study_plan_rpc_unexpected_error",
+                "msg": (
+                    f"study_plan_get(p_app='{app_key}') returned ok=false "
+                    f"error='{err}' (full payload: {payload!r})."
+                ),
+            })
+
+    return issues
+
+
 # ─────────────────────────── orchestration ────────────────────────────
 
 def run() -> dict[str, Any]:
@@ -477,7 +648,11 @@ def run() -> dict[str, Any]:
         "generated_at": started.isoformat(),
         "tool": "auto-audit Tier 1 monitor",
         "repos": {},
-        "cross_cutting": {"sibling_drift": [], "study_plan_parity": []},
+        "cross_cutting": {
+            "sibling_drift": [],
+            "study_plan_parity": [],
+            "study_plan_rpc": [],
+        },
     }
 
     for repo, cfg in REPO_CONFIG.items():
@@ -544,6 +719,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] study plan parity\n")
     report["cross_cutting"]["study_plan_parity"] = probe_study_plan_parity()
 
+    sys.stderr.write("[probe] study plan rpc smoke\n")
+    report["cross_cutting"]["study_plan_rpc"] = probe_study_plan_rpc()
+
     return report
 
 
@@ -595,6 +773,15 @@ def render_md(report: dict[str, Any]) -> str:
         lines.append("## 🟡 Cross-cutting: study plan syllabus drift")
         for i in spp:
             lines.append(f"- {i['kind']}: {i['msg']}")
+        lines.append("")
+    # Study plan RPC smoke (server whitelist, RPC reachability)
+    spr = report["cross_cutting"].get("study_plan_rpc", [])
+    if spr:
+        worst = "🔴" if any(i.get("severity") == "critical" for i in spr) else "🟡"
+        lines.append(f"## {worst} Cross-cutting: study plan RPC smoke")
+        for i in spr:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
         lines.append("")
     return "\n".join(lines)
 
@@ -764,8 +951,52 @@ def main() -> int:
             mark = "✓" if ok else "✗"
             sys.stderr.write(f"  {mark} {repo}#{num} → {template}\n")
 
+    # Cross-cutting critical findings → file ONE issue in auto-audit itself,
+    # since these issues span multiple repos (e.g. server-side RPC whitelist
+    # drift hits all 3 medical PWAs at once). Filing N copies in N repos
+    # would just confuse the cleanup.
+    cc_critical: list[dict[str, Any]] = []
+    for section_name, items in report["cross_cutting"].items():
+        for i in items:
+            if isinstance(i, dict) and i.get("severity") == "critical":
+                cc_critical.append({"section": section_name, **i})
+
+    if cc_critical and not DRY_RUN:
+        title = (
+            f"[auto-audit] {len(cc_critical)} cross-cutting critical issue(s) — "
+            f"{report['generated_at'][:10]}"
+        )
+        body_lines = [
+            f"_Auto-generated by `Eiasash/auto-audit` Tier 1 monitor at "
+            f"{report['generated_at']}._",
+            "",
+            "## Cross-cutting critical findings",
+            "",
+            "These findings affect shared infrastructure (Supabase RPCs, "
+            "sibling engine, syllabus parity) — fix once, all apps recover.",
+            "",
+        ]
+        for i in cc_critical:
+            body_lines.append(f"- **[{i['section']}] {i['kind']}** — {i['msg']}")
+        body_lines += [
+            "",
+            "## What happens next",
+            "",
+            "* No auto-fix template is wired for cross-cutting issues yet — "
+            "this is a manual fix.",
+            "* For `study_plan_rpc_whitelist_drift`: check the latest "
+            "migration on `public.study_plan_get` / `study_plan_upsert` in "
+            "Supabase project `krmlzwwelqvlfslwltol`. The whitelist must "
+            "match `STUDY_PLAN_RPC_APPS` in `scripts/probe.py`.",
+            "* Close this issue once the next probe (≤30 min) reports green.",
+        ]
+        file_issue("auto-audit", title, "\n".join(body_lines), ["auto-audit", "cross-cutting"])
+
     # Decide exit code based on severity (non-zero so the workflow run is RED visibly)
-    any_critical = any(i["severity"] == "critical" for r in report["repos"].values() for i in r["issues"])
+    any_critical = (
+        any(i["severity"] == "critical" for r in report["repos"].values() for i in r["issues"])
+        or len(cc_critical) > 0
+    )
     return 1 if any_critical else 0
 
 
