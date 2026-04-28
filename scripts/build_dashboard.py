@@ -606,8 +606,8 @@ def main(argv: list[str]) -> int:
                         help="Path to a specific health-report JSON. Default: newest in --report-dir.")
     parser.add_argument("--report-dir", type=Path, default=Path("health-reports"),
                         help="Directory containing health reports (default: health-reports/).")
-    parser.add_argument("--out", type=Path, default=Path("dashboard/index.html"),
-                        help="Output HTML path (default: dashboard/index.html).")
+    parser.add_argument("--out", type=Path, default=Path("docs/index.html"),
+                        help="Output HTML path (default: docs/index.html).")
     args = parser.parse_args(argv)
 
     report_dir: Path = args.report_dir
