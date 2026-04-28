@@ -1,3 +1,28 @@
+-- ⚠️  HISTORICAL — DO NOT APPLY  ⚠️
+-- ===========================================================================
+-- This file captures the Phase 2 *design* exploration. The actual deployed
+-- schema lives in `Eiasash/FamilyMedicine/supabase/migrations/0002_study_plans.sql`
+-- and differs in important ways:
+--
+--   • Deployed `app_users` is keyed by `username` (NOT `id`), so any RPC
+--     written here that does `WHERE id = auth.uid()` would fail to compile.
+--   • Deployed RPCs take `p_username` as an explicit param (Eias's auth is
+--     custom bcrypt via `auth_login_user`, NOT Supabase auth — there is
+--     no `auth.uid()` in production).
+--   • Deployed grants: `EXECUTE TO anon, authenticated` (clients call with
+--     publishable key; password validation happens INSIDE the RPC body).
+--     This file's `TO authenticated` only is wrong for production.
+--   • `study_plan_delete` (defined here) is NOT deployed. The deployed
+--     `study_plans.username` has `REFERENCES app_users(username) ON DELETE
+--     CASCADE`, so account deletion auto-cleans plans. Combined with
+--     UPSERT-overwrite for "I want a different plan", there is no use
+--     case for an explicit delete RPC.
+--
+-- Keep this file for archaeological reference only. If you need to re-apply
+-- the schema (e.g., on a branch), use the FamilyMedicine migration as the
+-- source of truth.
+-- ===========================================================================
+
 -- Migration: Create study_plans table and RPC functions for Phase 2
 -- Target: Supabase PostgreSQL database shared by Geri, Pnimit, Mishpacha PWAs
 -- Run this once in the Supabase SQL editor or via migration tool
