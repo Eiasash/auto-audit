@@ -19,8 +19,8 @@ Three tiers, build-on-each-other:
 
 | Tier | What | Cost | When it runs | Status |
 |------|------|------|--------------|--------|
-| **1** | Deterministic probe → opens GitHub issues on red findings | Free | every 30 min during work hours, hourly at night | ✅ live |
-| **2** | Auto-fix dispatcher (PR back to target repo) | Free for `version_trinity`; API tokens for `investigate` | manual (`workflow_dispatch`) | ✅ scaffold; `version_trinity` works without Claude; `investigate` requires `ANTHROPIC_API_KEY` |
+| **1** | Deterministic probe → opens GitHub issues on red findings, **auto-dispatches known fix templates** | Free | every 30 min during work hours, hourly at night | ✅ live |
+| **2** | Auto-fix dispatcher (PR back to target repo) — manual entrypoint AND auto-dispatch target | Free for `version_trinity`; API tokens for `investigate` | dispatched by Tier 1 for known templates; manual `workflow_dispatch` otherwise | ✅ scaffold; `version_trinity` works without Claude; `investigate` requires `ANTHROPIC_API_KEY` |
 | **3** | Cross-repo synthesis (sibling sync, secret-rotation reminders, spend trends) | Free | weekly | 🟡 planned |
 
 ### Tier 1 — `health-check.yml` + `scripts/probe.py`
@@ -39,6 +39,17 @@ Outputs:
 - `health-reports/YYYY-MM-DDTHH-MM*.md` and `.json` — committed every run as the audit trail.
 - A GitHub issue in the affected repo, labeled `auto-audit` (and `auto-fix-eligible` if the failure has a known fix template). Idempotent by title within the same day, so a persistent problem doesn't spam.
 - Run summary inline in GitHub Actions UI.
+
+#### Auto-dispatch
+
+For known-safe fix templates (currently just `regenerate_misaligned_distractors`), the probe also fires a `workflow_dispatch` against the matching workflow in this repo immediately after filing the issue. The issue gets a comment with a link to the dispatched run. This closes the loop without needing a human to click "Run workflow".
+
+Safeguards:
+
+- **Allowlist** — only templates in `AUTO_DISPATCH_TEMPLATES` (in `scripts/probe.py`) are eligible. New templates stay manual until they earn trust.
+- **Idempotency** — before dispatching, the probe queries this repo's queued + in-progress runs of the target workflow. If one is already running, dispatch is skipped (with a comment on the issue noting the skip).
+- **Kill switch** — set `AUTO_DISPATCH_DISABLED=1` in the cron env (or surface it from a repo variable) to revert to manual click-to-fix without code changes.
+- **No prod push** — auto-dispatched workflows still open PRs, never push to `main`. Same review gate as manual dispatch.
 
 #### Modifying the probe
 
@@ -68,7 +79,7 @@ Manual trigger via Actions UI. Pick:
 
 1. **Create a fine-grained PAT** at https://github.com/settings/tokens?type=beta with:
    - Resource: `Eiasash/Geriatrics`, `Eiasash/InternalMedicine`, `Eiasash/FamilyMedicine`, `Eiasash/ward-helper`, `Eiasash/Toranot`, `Eiasash/watch-advisor2`, `Eiasash/auto-audit`.
-   - Permissions: **Contents** → Read & write (for committing fix branches), **Issues** → Read & write, **Pull requests** → Read & write, **Actions** → Read.
+   - Permissions: **Contents** → Read & write (for committing fix branches), **Issues** → Read & write, **Pull requests** → Read & write, **Actions** → Read & write (the last one is required for Tier 1 auto-dispatch — it triggers `workflow_dispatch` on `Eiasash/auto-audit`).
    - Lifetime: 1 year (rotate annually). 90-day is fine if you prefer.
 2. **Add it as a repository secret** in this repo: Settings → Secrets and variables → Actions → New repository secret → name `MONITOR_PAT`, paste the token.
 3. **For Tier 2 `investigate` only**: add `ANTHROPIC_API_KEY` the same way. Skippable for now — the deterministic templates work without it.

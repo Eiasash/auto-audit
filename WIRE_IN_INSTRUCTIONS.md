@@ -51,13 +51,13 @@ git push origin main
 
 ## After pushing — PAT scope upgrade (one-time)
 
-The existing `MONITOR_PAT` likely has read-only scopes. The auto-fix needs to push a branch and open a PR, so it needs write access on `Eiasash/Geriatrics` (and only that one repo — the rest stay read-only).
+The existing `MONITOR_PAT` likely has read-only scopes. The auto-fix needs to push a branch and open a PR (write on `Eiasash/Geriatrics`), and the Tier 1 auto-dispatch needs to fire `workflow_dispatch` (Actions: write on `Eiasash/auto-audit`). Other repos stay read-only.
 
 **Click-by-click:**
 
 1. Go to <https://github.com/settings/tokens?type=beta>
 2. Find your `MONITOR_PAT` token (or whatever you named it). Click it.
-3. Under **"Repository access"** — confirm `Eiasash/Geriatrics` is in the list. (It already is, since the existing probe reads from it.)
+3. Under **"Repository access"** — confirm `Eiasash/Geriatrics` AND `Eiasash/auto-audit` are in the list. (They already are, since the existing probe reads from both.)
 4. Under **"Repository permissions"**, find these and set them as shown:
 
    | Permission | Old value | New value |
@@ -65,8 +65,9 @@ The existing `MONITOR_PAT` likely has read-only scopes. The auto-fix needs to pu
    | Contents | Read-only | **Read and write** |
    | Pull requests | (none) | **Read and write** |
    | Issues | Read-only | **Read and write** |
+   | Actions | Read-only | **Read and write** |
 
-   Issues:write is needed so the auto-fix can comment on / close the originating auto-audit issue.
+   Issues:write is needed so the auto-fix can comment on / close the originating auto-audit issue. Actions:write is needed so Tier 1 can `workflow_dispatch` against this repo (closes the loop without manual click).
 
 5. Click **"Update token"** at the bottom.
 
@@ -78,15 +79,24 @@ Once shipped:
 
 1. Auto-audit Tier 1 cron runs `probe_distractor_alignment` every 30 min.
 2. If `Eiasash/Geriatrics` distractors are misaligned, the probe opens a CRITICAL issue on the affected repo (`Eiasash/Geriatrics`), labeled `auto-fix-eligible`.
-3. **You** look at the issue, decide if you want to auto-fix (the alternative is manual regen on your laptop).
-4. Go to <https://github.com/Eiasash/auto-audit/actions/workflows/regenerate-misaligned-distractors.yml>
-5. Click **"Run workflow"** (top right of the workflow runs list).
-6. Optionally paste the issue number into the input box (so the PR cross-links).
-7. Click the green **"Run workflow"** button.
-8. Wait 30-60 min. The PR appears at `Eiasash/Geriatrics/pulls`.
-9. Review the PR. Spot-check 2-3 questions on the preview deploy. Merge if clean.
+3. **Tier 1 auto-dispatches the fix workflow immediately after filing the issue** (`regenerate_misaligned_distractors` is in the allowlist in `scripts/probe.py::AUTO_DISPATCH_TEMPLATES`). The issue gets a comment with a link to the dispatched run.
+4. Wait 30–60 min. The PR appears at `Eiasash/Geriatrics/pulls`.
+5. Review the PR. Spot-check 2-3 questions on the preview deploy. Merge if clean.
 
 The PR will never merge itself. You always do the final review.
+
+### Reverting to manual (if you want to)
+
+If for any reason you want the old "click Run workflow yourself" flow back, set `AUTO_DISPATCH_DISABLED=1` in `.github/workflows/health-check.yml`'s `Run probe` step env block. No code change needed — the probe checks that env var on every run.
+
+You can still dispatch manually anytime:
+
+1. Go to <https://github.com/Eiasash/auto-audit/actions/workflows/regenerate-misaligned-distractors.yml>
+2. Click **"Run workflow"** (top right of the workflow runs list).
+3. Optionally paste the issue number into the input box (so the PR cross-links).
+4. Click the green **"Run workflow"** button.
+
+Manual dispatch is also the right path during the same probe cycle if auto-dispatch was skipped because a previous run was still in progress.
 
 ## Test it works (no real corruption needed)
 
