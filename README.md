@@ -32,8 +32,11 @@ Every 30 minutes, the probe:
 3. Compares — if `live != main` or files inside the repo disagree (the **version-trinity** invariant), that's a critical finding.
 4. Pulls the latest `CI` and `Deploy to GitHub Pages` workflow runs on `main`. Any `failure` is critical.
 5. Hits Toranot's `/self-audit` and `watch-advisor2`'s `/skill-snapshot` endpoints. Non-200 or `status != HEALTHY` is a warning.
-6. Hashes `shared/fsrs.js` and `harrison_chapters.json` across the three medical PWAs. Any divergence is a warning.
-7. **Smoke-tests the shared `study_plan_get` RPC** for each app's documented `APP_KEY` (`geri` / `pnimit` / `mishpacha`) using a sentinel username. `{ok:false, error:'invalid_app'}` from the server is critical (whitelist drift). Catches the class of bug that surfaced 2026-04-28 (Geri v10.46.0 sent `'shlav'`, server rejected, user saw `invalid_app ✗` despite HTTP 200). Cross-cutting critical findings open ONE issue in `auto-audit` itself, not N copies in N repos.
+6. **Tracks call-count deltas** (Toranot only) — compares `tokenUsage.currentMonthTotals.call_count` against the previous run (30-min interval). Alarms if delta exceeds thresholds: **WARN** at >500 calls/30min (~17/min), **CRITICAL** at >2000 calls/30min (~67/min). This catches runaway-loop scenarios (auth-failure retry storms, malformed-JSON re-prompt loops, misconfigured bulk-gen workers) that today's static checks miss. State persists in `health-reports/.last_call_count.json`. Suppression: set `BULK_GEN_ACTIVE=1` repo variable during legitimate bulk-gen events to silence alarms.
+7. Hashes `shared/fsrs.js` and `harrison_chapters.json` across the three medical PWAs. Any divergence is a warning.
+8. **Smoke-tests the shared `study_plan_get` RPC** for each app's documented `APP_KEY` (`geri` / `pnimit` / `mishpacha`) using a sentinel username. `{ok:false, error:'invalid_app'}` from the server is critical (whitelist drift). Catches the class of bug that surfaced 2026-04-28 (Geri v10.46.0 sent `'shlav'`, server rejected, user saw `invalid_app ✗` despite HTTP 200). Cross-cutting critical findings open ONE issue in `auto-audit` itself, not N copies in N repos.
+
+> **Note on trend tracking**: The Toranot proxy previously returned `trends: []` in `/api/self-audit` due to a deprioritized feature. Per the stance on Toranot UI/feature work, **auto-audit now owns trend tracking** via the call-count-delta probe. The state file in `health-reports/.last_call_count.json` serves as the historical baseline for delta computation.
 
 Outputs:
 
