@@ -136,6 +136,46 @@ AUTO_DISPATCH_TEMPLATES: dict[str, tuple[str, str]] = {
     ),
 }
 
+# ── Ad-hoc workflow failure streak detection (issue #9) ────────────────
+#
+# probe_workflows() above only flags CI / Deploy / Integrity Guard as
+# critical. Anything else (distractor-autopsy, weekly-audit,
+# claude-code-review, distractor-merge-pr, …) can fail every cron
+# indefinitely and never surface — exactly what bit Geri+Pnimit on
+# 2026-04-28 (cowork/distractor-autopsy branch wipe → 5/5 silent
+# failures over 10h, invisible in the green health-report).
+#
+# The probe_workflow_failure_streaks() function below catches that
+# class of rot. Severity is warning, not critical — these are
+# background-job failures, not deploy-blockers — so they surface in
+# the markdown report (visible in $GITHUB_STEP_SUMMARY) without
+# spamming auto-fix issues.
+WORKFLOW_FAILURE_STREAK_THRESHOLD = 3  # consecutive failures before flagging
+
+# Per-repo allowlist for known-acceptable failures. Use sparingly —
+# every entry here is a workflow whose failures we have consciously
+# decided to ignore. Adding noise here is exactly what the issue is
+# trying to avoid catching from the OTHER direction.
+#
+# Format: { repo_name: { workflow_filename: "reason" } }
+WORKFLOW_FAILURE_ALLOWLIST: dict[str, dict[str, str]] = {
+    "watch-advisor2": {
+        # Calls anthropics/claude-code-action@beta which needs
+        # ANTHROPIC_API_KEY in repo secrets. Documented gap on Eias's
+        # watch-list ("Tier 2 investigate template"). Will fail every
+        # Monday until the key lands. No noise.
+        "weekly-audit.yml": "needs ANTHROPIC_API_KEY (documented gap)",
+    },
+    "Toranot": {
+        # Bundle-size cap (150 kB) is a flap — bundle is currently
+        # 147.4 kB, last failure was a regex parse on the size-extract
+        # step. Toranot is deprioritized for UI/feature work; if this
+        # turns into real bundle bloat the cap should be bumped, not
+        # the workflow alerted on.
+        "toranot-weekly-audit.yml": "bundle-size flap; deprioritized repo",
+    },
+}
+
 
 def _http_json(url: str, *, headers: Optional[dict] = None, body: Optional[bytes] = None,
                method: Optional[str] = None, timeout: int = 20, _retry: bool = True) -> tuple[int, Any]:
@@ -335,6 +375,89 @@ def probe_workflows(repo: str, cfg: dict[str, Any]) -> dict[str, Any]:
                     "auto_fix": "rerun_or_debug",
                 })
     return out
+
+
+def probe_workflow_failure_streaks(repo: str) -> list[dict[str, Any]]:
+    """Catch ad-hoc workflow failure streaks invisible to probe_workflows().
+
+    probe_workflows() only flags CI / Deploy / Integrity Guard. Workflows
+    like distractor-autopsy, weekly-audit, claude-code-review,
+    distractor-merge-pr can fail every cron indefinitely and never
+    surface — exactly what bit Geri+Pnimit on 2026-04-28 (cowork/
+    distractor-autopsy branch wipe → 5/5 silent failures over 10h, while
+    the health-report stayed green).
+
+    Strategy: enumerate active `.github/workflows/*.yml` files, fetch the
+    last N runs on main for each, flag if the last STREAK_THRESHOLD
+    completed runs are all conclusion=failure (or timed_out /
+    startup_failure). Allowlist via WORKFLOW_FAILURE_ALLOWLIST so
+    legitimately-broken workflows don't spam.
+
+    Severity is warning, not critical — these are background-job rot, not
+    deploy-blockers. Tier 2 has no auto-fix template wired for this; the
+    fix is "go look at the workflow run" with the URL in the finding.
+    """
+    issues: list[dict[str, Any]] = []
+
+    # 1. List active workflows for this repo
+    sc, data = gh(f"/repos/{OWNER}/{repo}/actions/workflows")
+    if sc != 200 or not isinstance(data, dict):
+        return issues
+
+    workflows = data.get("workflows", [])
+    allowlist = WORKFLOW_FAILURE_ALLOWLIST.get(repo, {})
+
+    # Severity-comparable failure conclusions
+    fail_concls = {"failure", "timed_out", "startup_failure"}
+
+    for wf in workflows:
+        if wf.get("state") != "active":
+            continue
+        path = wf.get("path", "")
+        # Skip GitHub-managed dynamic workflows (Pages build, Dependabot,
+        # Copilot agent, anthropic-code-agent). Those have synthetic paths
+        # like `dynamic/pages/...` and aren't user-controlled YAML.
+        if not path.startswith(".github/workflows/"):
+            continue
+        filename = path.rsplit("/", 1)[-1]
+        if filename in allowlist:
+            continue
+
+        # 2. Fetch the last few runs on main for this workflow.
+        # Pull a couple extra so 1–2 in_progress runs at the head don't
+        # silently shrink the completed-window below STREAK_THRESHOLD.
+        sc2, runs_data = gh(
+            f"/repos/{OWNER}/{repo}/actions/workflows/{filename}/runs"
+            f"?branch=main&per_page={WORKFLOW_FAILURE_STREAK_THRESHOLD + 2}"
+        )
+        if sc2 != 200 or not isinstance(runs_data, dict):
+            continue
+        runs = runs_data.get("workflow_runs", [])
+
+        # Only consider COMPLETED runs (skip queued/in_progress at the head).
+        # If the workflow hasn't accumulated 3 completed runs yet, skip —
+        # don't fire a false-positive on a fresh workflow.
+        completed = [r for r in runs if r.get("status") == "completed"]
+        if len(completed) < WORKFLOW_FAILURE_STREAK_THRESHOLD:
+            continue
+
+        recent = completed[:WORKFLOW_FAILURE_STREAK_THRESHOLD]
+        if all(r.get("conclusion") in fail_concls for r in recent):
+            latest = recent[0]
+            wf_name = wf.get("name") or filename
+            issues.append({
+                "severity": "warning",
+                "kind": "workflow_failure_streak",
+                "msg": (
+                    f"{wf_name} ({filename}) has failed "
+                    f"{WORKFLOW_FAILURE_STREAK_THRESHOLD} consecutive runs on main. "
+                    f"Latest: {latest.get('html_url', '?')}. If this is expected, "
+                    f"add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py."
+                ),
+                "url": latest.get("html_url"),
+            })
+
+    return issues
 
 
 def probe_deploy_drift(repo: str, cfg: dict[str, Any], versions: dict[str, str | None],
@@ -788,6 +911,11 @@ def run() -> dict[str, Any]:
         wf = probe_workflows(repo, cfg)
         repo_report["raw"]["workflows"] = wf.get("workflows", {})
         repo_report["issues"].extend(wf.get("issues", []))
+
+        # Catch ad-hoc workflow failure streaks (issue #9). Warns when any
+        # workflow under .github/workflows/ has failed N consecutive runs
+        # on main. Allowlisted via WORKFLOW_FAILURE_ALLOWLIST.
+        repo_report["issues"].extend(probe_workflow_failure_streaks(repo))
 
         # Deploy-drift cross-check
         if live.get("live_sw_version") and repo_report["raw"].get("versions"):
