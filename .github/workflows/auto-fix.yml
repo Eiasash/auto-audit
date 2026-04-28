@@ -124,20 +124,123 @@ jobs:
           git diff --stat
 
       # ── Fix template: investigate (Claude-driven) ─────────────────
-      # Placeholder: install Claude Code Action when first needed.
-      # See https://github.com/anthropics/claude-code-action for the canonical
-      # invocation. Disabled until ANTHROPIC_API_KEY is configured AND a real
-      # prompt is wired (out-of-scope for this bootstrap commit).
-      - name: investigate stub
+      # Claude Code CLI in headless mode. Reads the auto-audit issue,
+      # audits the relevant code paths, applies a minimal surgical fix,
+      # and leaves the working tree dirty. The downstream test + PR
+      # steps run the same gates as the deterministic templates.
+      #
+      # Hard guardrails baked into the prompt:
+      #   - Cannot touch shared-engine files (fsrs.js, harrison_chapters.json, drugs.json)
+      #   - Cannot bump version numbers (version_trinity owns that)
+      #   - Must run `npx vitest run` before declaring done
+      #   - Bails to /tmp/investigate-failure.md if no safe fix is found
+      - name: Fetch issue context (investigate)
         if: inputs.fix_kind == 'investigate'
+        env:
+          GH_TOKEN: ${{ secrets.MONITOR_PAT }}
         run: |
-          echo "::warning::investigate template not yet wired. Bring in anthropics/claude-code-action when ready."
-          echo "Issue: Eiasash/${{ inputs.target_repo }}#${{ inputs.issue_number }}"
-          exit 78  # GH Actions: "neutral" — doesn't fail the run, signals incomplete
+          set -euo pipefail
+          mkdir -p /tmp/issue
+          curl -sf -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/Eiasash/${{ inputs.target_repo }}/issues/${{ inputs.issue_number }}" \
+            > /tmp/issue/raw.json
+          jq -r '.title // ""' /tmp/issue/raw.json > /tmp/issue/title.txt
+          jq -r '.body  // ""' /tmp/issue/raw.json > /tmp/issue/body.txt
+          jq -r '.labels[].name' /tmp/issue/raw.json > /tmp/issue/labels.txt || true
+          echo "Title: $(cat /tmp/issue/title.txt)"
+          echo "Body: $(wc -c < /tmp/issue/body.txt) chars"
+          echo "Labels:" && cat /tmp/issue/labels.txt
+
+      - name: Install Claude Code CLI
+        if: inputs.fix_kind == 'investigate'
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run Claude (investigate)
+        if: inputs.fix_kind == 'investigate'
+        working-directory: target
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TARGET_REPO: ${{ inputs.target_repo }}
+          ISSUE_NUM: ${{ inputs.issue_number }}
+        run: |
+          set -euo pipefail
+          # Build prompt file with issue context. Heredoc with a quoted
+          # delimiter ('PROMPT') prevents shell expansion of $VARS inside
+          # the prompt body — critical because the issue body may contain
+          # backticks, dollar signs, etc.
+          cat > /tmp/prompt.md <<'PROMPT_HEAD'
+          You are auto-audit's Tier 2 investigate template, running headless inside the cloned target repo.
+          Auto-audit's Tier 1 cron filed an issue against this repo. Read it carefully, audit the
+          relevant code paths, and apply the SMALLEST possible fix.
+
+          Hard constraints — violations are unrecoverable failures:
+
+          1. NEVER edit any of these files (lane discipline — managed by sibling_sync):
+             - shared/fsrs.js
+             - harrison_chapters.json
+             - drugs.json
+          2. NEVER bump version numbers anywhere — package.json version, APP_VERSION constants,
+             sw.js CACHE strings. The version_trinity template owns those. If a version mismatch
+             is the root cause, write that finding to /tmp/investigate-failure.md and stop.
+          3. NEVER force-push or rewrite history. Just edit files; the runner commits.
+          4. ALWAYS run `npx vitest run` before declaring done. If tests fail, iterate up to
+             three times. If still failing after the third attempt, write the failure to
+             /tmp/investigate-failure.md and stop without committing.
+          5. PREFER no diff over a wrong diff. If the issue is unclear or the fix is risky,
+             write your analysis to /tmp/investigate-failure.md and stop. The runner detects
+             zero-diff and exits cleanly with no PR.
+          6. After fixing, write a one-paragraph summary of what changed and why to
+             /tmp/investigate-summary.md. The runner uses this as the PR body.
+
+          Issue context:
+
+          ---
+          PROMPT_HEAD
+          {
+            echo "TITLE: $(cat /tmp/issue/title.txt)"
+            echo ""
+            echo "LABELS: $(tr '\n' ',' < /tmp/issue/labels.txt | sed 's/,$//')"
+            echo ""
+            echo "BODY:"
+            cat /tmp/issue/body.txt
+            echo ""
+            echo "---"
+            echo ""
+            echo "Repo: Eiasash/${TARGET_REPO}"
+            echo "Issue: #${ISSUE_NUM}"
+          } >> /tmp/prompt.md
+
+          echo "=== prompt size: $(wc -c < /tmp/prompt.md) chars ==="
+
+          # Headless Claude. --print emits final response then exits.
+          # --max-turns prevents runaway loops if the agent gets stuck.
+          # --model: Sonnet 4.6 (codebase memory: surgical fixes don't need Opus).
+          # Allow it to read/write files and run npm/npx; deny everything else.
+          claude \
+            --print \
+            --max-turns 30 \
+            --model claude-sonnet-4-6 \
+            --permission-mode bypassPermissions \
+            --dangerously-skip-permissions \
+            < /tmp/prompt.md \
+          | tee /tmp/claude-output.txt
+
+          # If Claude bailed with a failure note, surface it and exit cleanly.
+          # The PR-open step will see no diff and skip without producing an empty PR.
+          if [ -f /tmp/investigate-failure.md ]; then
+            echo "::warning::Claude bailed without a fix. See /tmp/investigate-failure.md:"
+            cat /tmp/investigate-failure.md
+            # Reset any partial edits so the PR step bails on zero-diff.
+            git reset --hard HEAD
+          fi
+
+          # Show what changed for the run log.
+          echo "=== diffstat ==="
+          git diff --stat || true
 
       # ── Quality gate: tests still pass after the fix ───────────────
       - name: Run tests
-        if: inputs.fix_kind != 'investigate'
         working-directory: target
         run: |
           if [ -f package.json ] && grep -q '"vitest"' package.json; then
@@ -148,7 +251,6 @@ jobs:
 
       # ── PR back to target repo ─────────────────────────────────────
       - name: Open PR with the fix
-        if: inputs.fix_kind != 'investigate'
         working-directory: target
         env:
           GH_TOKEN: ${{ secrets.MONITOR_PAT }}
@@ -184,8 +286,14 @@ jobs:
           git commit -m "$MSG"
           git push --set-upstream origin "$BR"
           # Open PR via the API (no gh CLI dependency)
-          BODY=$(printf 'Auto-generated fix.\n\nTrigger: workflow_dispatch from `Eiasash/auto-audit`.\nKind: `%s`\nClosed issue: #%s\n\nReview the diff before merging. Tier 2 never bypasses CI.' \
-            "$FIX_KIND" "$ISSUE_NUM")
+          # For `investigate`, prefer Claude's own summary if it produced one.
+          if [ "$FIX_KIND" = "investigate" ] && [ -f /tmp/investigate-summary.md ]; then
+            BODY=$(printf 'Auto-generated by Tier 2 investigate (Claude headless).\n\n## Summary\n%s\n\n---\nTrigger: workflow_dispatch from `Eiasash/auto-audit`.\nClosed issue: #%s\n\nReview the diff carefully — Claude is fallible. Tier 2 never bypasses CI.' \
+              "$(cat /tmp/investigate-summary.md)" "$ISSUE_NUM")
+          else
+            BODY=$(printf 'Auto-generated fix.\n\nTrigger: workflow_dispatch from `Eiasash/auto-audit`.\nKind: `%s`\nClosed issue: #%s\n\nReview the diff before merging. Tier 2 never bypasses CI.' \
+              "$FIX_KIND" "$ISSUE_NUM")
+          fi
           curl -sf -H "Authorization: token $MONITOR_PAT" \
             -H "Accept: application/vnd.github+json" \
             -X POST "https://api.github.com/repos/Eiasash/${TARGET_REPO}/pulls" \

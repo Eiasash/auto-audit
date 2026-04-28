@@ -20,7 +20,7 @@ Three tiers, build-on-each-other:
 | Tier | What | Cost | When it runs | Status |
 |------|------|------|--------------|--------|
 | **1** | Deterministic probe → opens GitHub issues on red findings, **auto-dispatches known fix templates** | Free | every 30 min during work hours, hourly at night | ✅ live |
-| **2** | Auto-fix dispatcher (PR back to target repo) — manual entrypoint AND auto-dispatch target | Free for `version_trinity` / `sibling_sync` / `regenerate_misaligned_distractors`; API tokens for `investigate` | dispatched by Tier 1 for known templates; manual `workflow_dispatch` otherwise | ✅ live; `version_trinity` and `regenerate_misaligned_distractors` proven end-to-end on Geri 2026-04-28; `investigate` still stubbed (requires `ANTHROPIC_API_KEY` + Claude Code Action) |
+| **2** | Auto-fix dispatcher (PR back to target repo) — manual entrypoint AND auto-dispatch target | Free for `version_trinity` / `sibling_sync` / `regenerate_misaligned_distractors`; `ANTHROPIC_API_KEY`-gated for `investigate` | dispatched by Tier 1 for known templates; manual `workflow_dispatch` otherwise | ✅ live; `version_trinity` and `regenerate_misaligned_distractors` proven end-to-end on Geri 2026-04-28; `investigate` wired 2026-04-28 (Sonnet 4.6 headless via Claude Code CLI; requires `ANTHROPIC_API_KEY` secret) |
 | **3** | Cross-repo synthesis (sibling sync, secret-rotation reminders, spend trends) | Free | weekly | 🟡 planned |
 
 ### Tier 1 — `health-check.yml` + `scripts/probe.py`
@@ -86,11 +86,22 @@ was already in sync), the workflow exits green without opening an empty PR.
     Runs the target repo's vitest suite before opening a PR. Proven on Geri
     2026-04-28 (no-diff short-circuit path).
   - `sibling_sync` — propagates `shared/fsrs.js` from a chosen source repo
-    to its two siblings. Wired in the dispatcher; not yet exercised.
-  - `investigate` — placeholder for a Claude-Code-Action-driven fix loop.
-    Disabled until `ANTHROPIC_API_KEY` is configured and the action is
-    added. Pre-flight guard only requires the API key for this template
-    so the deterministic ones run on the current secret set.
+    to its two siblings. Listed in the dispatcher choice list but the
+    implementation block is missing; dispatching it currently runs `npm ci`,
+    finds no diff, and exits cleanly. **Wire-in pending** — see
+    `WIRE_IN_SIBLING_SYNC.md` (TODO).
+  - `investigate` — Claude-driven generic fix loop. Wired 2026-04-28 via
+    the Claude Code CLI (`@anthropic-ai/claude-code`) in headless mode
+    (`claude --print --max-turns 30 --model claude-sonnet-4-6`).
+    Pre-fetches issue title + body + labels via the GitHub API, builds a
+    prompt with hard guardrails (no shared-engine edits, no version
+    bumps, must pass vitest, bails to `/tmp/investigate-failure.md` if
+    the fix is unsafe), runs Claude in the cloned target repo, then
+    flows through the same test + PR-open gates as the deterministic
+    templates. Requires `ANTHROPIC_API_KEY` repo secret. Per-dispatch
+    cost ~$0.50–2 in Sonnet usage. Pre-flight guard only requires the
+    key for this template so the deterministic ones run on the current
+    secret set.
 
 - **`regenerate-misaligned-distractors.yml`** — standalone Geri-specific
   fix. Triggered by Tier 1 when `probe_distractor_alignment` finds
@@ -124,7 +135,7 @@ cron env to revert all auto-dispatch to manual without a code change.
    - Permissions: **Contents** → Read & write (for committing fix branches), **Issues** → Read & write, **Pull requests** → Read & write, **Actions** → Read & write (the last one is required for Tier 1 auto-dispatch — it triggers `workflow_dispatch` on `Eiasash/auto-audit`).
    - Lifetime: 1 year (rotate annually). 90-day is fine if you prefer.
 2. **Add it as a repository secret** in this repo: Settings → Secrets and variables → Actions → New repository secret → name `MONITOR_PAT`, paste the token.
-3. **For Tier 2 `investigate` only**: add `ANTHROPIC_API_KEY` the same way. Skippable for now — the deterministic templates work without it.
+3. **For Tier 2 `investigate`**: add `ANTHROPIC_API_KEY` the same way (Settings → Secrets and variables → Actions → New repository secret → name `ANTHROPIC_API_KEY`). The deterministic templates run without it; only `investigate` is gated. See `WIRE_IN_INVESTIGATE.md` for verification steps.
 4. **Trigger first run**: Actions tab → Tier 1 — Health Check → Run workflow → check the box for `dry_run` first time, then run live.
 
 ## What you'll see
