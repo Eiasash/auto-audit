@@ -52,7 +52,12 @@ jobs:
       - name: Guard — secrets present
         run: |
           test -n "$MONITOR_PAT"        || { echo "::error::MONITOR_PAT not set"; exit 1; }
-          test -n "$ANTHROPIC_API_KEY"  || { echo "::error::ANTHROPIC_API_KEY not set — Tier 2 disabled"; exit 1; }
+          # ANTHROPIC_API_KEY is only needed for the Claude-driven `investigate`
+          # template. version_trinity and sibling_sync are deterministic shell
+          # scripts that don't call Claude. Don't block them on a missing key.
+          if [ "${{ inputs.fix_kind }}" = "investigate" ]; then
+            test -n "$ANTHROPIC_API_KEY" || { echo "::error::ANTHROPIC_API_KEY required for fix_kind=investigate"; exit 1; }
+          fi
 
       - name: Checkout target repo
         uses: actions/checkout@v4
@@ -80,8 +85,21 @@ jobs:
         run: |
           set -euo pipefail
           PKG_VER=$(node -e "console.log(require('./package.json').version)")
-          # Pnimit normalize: 9.84.1.0 → 9.84.1
-          APP_VER=${PKG_VER%.0}
+          # Pnimit-specific convention: pkg=X.Y.Z.0, APP_VERSION=X.Y.Z (memory:
+          # regressionGuards.test.js:436 locks pkg=9.85.0.0 ↔ APP_VERSION=9.85.0).
+          # FM and Geri use exact-match: pkg=X.Y.Z = APP_VERSION = sw.js CACHE.
+          # The naive `${PKG_VER%.0}` shortest-suffix strip mangles Geri/FM
+          # (10.47.0 → 10.47, 1.9.0 → 1.9). Normalize per-repo instead.
+          case "${{ inputs.target_repo }}" in
+            InternalMedicine)
+              # Trim Pnimit's trailing 4th .0 if present.
+              APP_VER="${PKG_VER%.0}"
+              ;;
+            *)
+              # Everywhere else: package.json version IS the canonical APP_VERSION.
+              APP_VER="$PKG_VER"
+              ;;
+          esac
           echo "package.json: $PKG_VER → APP_VERSION/CACHE: $APP_VER"
           # Repo-specific touchpoints
           case "${{ inputs.target_repo }}" in
