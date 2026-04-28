@@ -1,0 +1,72 @@
+name: Dashboard — State of the Suite
+
+# Regenerates dashboard/index.html from the latest health-reports/*.json.
+#
+# Triggers:
+#   * After every successful "Tier 1 — Health Check" run (workflow_run).
+#   * Daily fallback at 05:30 UTC in case workflow_run misses.
+#   * Manual workflow_dispatch.
+#
+# Commits with `[skip ci]` so it never re-triggers itself or the probe loop.
+# build_dashboard.py is idempotent — if input == previous input, no diff,
+# no commit. Safe to run repeatedly.
+
+on:
+  workflow_run:
+    workflows: ["Tier 1 — Health Check"]
+    types: [completed]
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dashboard-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # When triggered by workflow_run, only rebuild after a probe that actually
+    # ran (success or failure both count — we want red dashboards too).
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build dashboard
+        run: python3 scripts/build_dashboard.py
+
+      - name: Commit dashboard if changed
+        run: |
+          set -e
+          git config user.email "auto-audit-bot@users.noreply.github.com"
+          git config user.name  "auto-audit-bot"
+          git add dashboard/index.html
+          if git diff --cached --quiet; then
+            echo "No dashboard change to commit."
+            exit 0
+          fi
+          git commit -m "chore(dashboard): regenerate state-of-the-suite [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin main; then
+              echo "Pushed dashboard on attempt $i"
+              exit 0
+            fi
+            echo "Push attempt $i failed, retrying after 5s..."
+            sleep 5
+          done
+          echo "::warning::Could not push dashboard after 3 retries"
+          exit 0
