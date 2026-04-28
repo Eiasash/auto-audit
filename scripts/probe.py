@@ -460,9 +460,36 @@ def probe_workflow_failure_streaks(repo: str) -> list[dict[str, Any]]:
     return issues
 
 
+# Grace window: if main HEAD is younger than this, demote drift critical→warning.
+# Pages/Netlify CDN typically catches up within 30-60s of push, but we've seen
+# up to 5 min of staleness. 10 min grace covers the long tail without masking
+# a stuck deploy.
+DEPLOY_DRIFT_GRACE_MINUTES = 10
+
+
+def _main_head_age_minutes(repo: str) -> float | None:
+    """Return age in minutes of the most recent commit on main, or None on error."""
+    try:
+        status, data = gh(f"/repos/{OWNER}/{repo}/commits/main")
+        if status != 200 or not isinstance(data, dict):
+            return None
+        ts = data.get("commit", {}).get("committer", {}).get("date")
+        if not ts:
+            return None
+        commit_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return (datetime.now(timezone.utc) - commit_dt).total_seconds() / 60.0
+    except Exception as e:
+        sys.stderr.write(f"[deploy-drift] Failed to fetch main HEAD age for {repo}: {e}\n")
+        return None
+
+
 def probe_deploy_drift(repo: str, cfg: dict[str, Any], versions: dict[str, str | None],
                        live_ver: str | None) -> list[dict[str, Any]]:
-    """If we have a live SW version AND a repo version, they must match."""
+    """If we have a live SW version AND a repo version, they must match.
+
+    If main HEAD is younger than DEPLOY_DRIFT_GRACE_MINUTES, demote critical
+    → warning to avoid false positives from in-flight CDN catch-up.
+    """
     issues: list[dict[str, Any]] = []
     if not live_ver or not versions:
         return issues
@@ -473,11 +500,17 @@ def probe_deploy_drift(repo: str, cfg: dict[str, Any], versions: dict[str, str |
     if not repo_vers:
         return issues
     if live_ver not in repo_vers:
+        # Check grace window: if main was just pushed, CDN is probably catching up
+        head_age = _main_head_age_minutes(repo)
+        in_grace = head_age is not None and head_age < DEPLOY_DRIFT_GRACE_MINUTES
+        msg_suffix = ""
+        if in_grace:
+            msg_suffix = f" (main HEAD {head_age:.1f} min old, within {DEPLOY_DRIFT_GRACE_MINUTES} min grace — likely in-flight deploy)"
         issues.append({
-            "severity": "critical",
+            "severity": "warning" if in_grace else "critical",
             "kind": "deploy_live_drift",
-            "msg": f"Live SW serves v{live_ver} but main has v{sorted(repo_vers)}",
-            "auto_fix": "investigate_deploy_pipeline",
+            "msg": f"Live SW serves v{live_ver} but main has v{sorted(repo_vers)}{msg_suffix}",
+            "auto_fix": None if in_grace else "investigate_deploy_pipeline",
         })
     return issues
 
