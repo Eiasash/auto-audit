@@ -20,7 +20,7 @@ Three tiers, build-on-each-other:
 | Tier | What | Cost | When it runs | Status |
 |------|------|------|--------------|--------|
 | **1** | Deterministic probe → opens GitHub issues on red findings, **auto-dispatches known fix templates** | Free | every 30 min during work hours, hourly at night | ✅ live |
-| **2** | Auto-fix dispatcher (PR back to target repo) — manual entrypoint AND auto-dispatch target | Free for `version_trinity`; API tokens for `investigate` | dispatched by Tier 1 for known templates; manual `workflow_dispatch` otherwise | ✅ scaffold; `version_trinity` works without Claude; `investigate` requires `ANTHROPIC_API_KEY` |
+| **2** | Auto-fix dispatcher (PR back to target repo) — manual entrypoint AND auto-dispatch target | Free for `version_trinity` / `sibling_sync` / `regenerate_misaligned_distractors`; API tokens for `investigate` | dispatched by Tier 1 for known templates; manual `workflow_dispatch` otherwise | ✅ live; `version_trinity` and `regenerate_misaligned_distractors` proven end-to-end on Geri 2026-04-28; `investigate` still stubbed (requires `ANTHROPIC_API_KEY` + Claude Code Action) |
 | **3** | Cross-repo synthesis (sibling sync, secret-rotation reminders, spend trends) | Free | weekly | 🟡 planned |
 
 ### Tier 1 — `health-check.yml` + `scripts/probe.py`
@@ -56,18 +56,56 @@ Safeguards:
 
 When changing `scripts/probes/probe_distractor_alignment.py` or its adapter in `scripts/probe.py`, run `python scripts/probes/test_alignment_dispatch.py` before pushing. Exit 0 = ship. Deliberately not in CI — it pulls ~17 MB twice and depends on a known-bad SHA that could be force-pushed away.
 
-### Tier 2 — `auto-fix.yml`
+### Tier 2 — `auto-fix.yml` + standalone fix workflows
 
-Manual trigger via Actions UI. Pick:
+Tier 2 is a set of `workflow_dispatch` workflows in this repo that fix issues
+in the target PWAs. They're triggered three ways:
 
-- `target_repo` — which of the six PWAs.
-- `issue_number` — the auto-audit issue number to close.
-- `fix_kind` — currently:
-  - `version_trinity` — deterministic. Reads `package.json` version, bumps `APP_VERSION` + `sw.js CACHE` to match. Runs the test suite. Opens a PR. **No Claude needed.**
-  - `sibling_sync` — propagates `shared/fsrs.js` from a chosen source repo to its two siblings. (Stub — to be wired.)
-  - `investigate` — placeholder for a Claude-Code-Action-driven fix loop. Disabled until `ANTHROPIC_API_KEY` is configured and the action is added.
+1. **Auto-dispatched by Tier 1** — when the probe files an issue with an
+   `auto_fix` template that's in the `AUTO_DISPATCH_TEMPLATES` allowlist
+   (currently just `regenerate_misaligned_distractors`), Tier 1 fires the
+   matching workflow immediately.
+2. **Manual click** — Actions tab → pick workflow → Run workflow.
+3. **Manual API call** — `gh api -X POST .../actions/workflows/<name>/dispatches`.
 
-**Tier 2 never pushes to `main` of any target repo.** Every fix is a PR you review.
+**Tier 2 never pushes to `main` of any target repo.** Every fix is a PR you
+review. If a fix produces no diff (e.g. version_trinity ran but everything
+was already in sync), the workflow exits green without opening an empty PR.
+
+#### Living templates
+
+- **`auto-fix.yml`** — generic dispatcher with `version_trinity` and
+  `sibling_sync` templates.
+  - `version_trinity` — reads `package.json` version, propagates it to
+    `APP_VERSION` (in `shlav-a-mega.html` for Geri or `src/core/constants.js`
+    for FM/Pnimit) and `sw.js CACHE`. Per-repo normalization handles the
+    Pnimit `pkg=X.Y.Z.0 → APP_VERSION=X.Y.Z` quirk; Geri/FM use exact match.
+    Runs the target repo's vitest suite before opening a PR. Proven on Geri
+    2026-04-28 (no-diff short-circuit path).
+  - `sibling_sync` — propagates `shared/fsrs.js` from a chosen source repo
+    to its two siblings. Wired in the dispatcher; not yet exercised.
+  - `investigate` — placeholder for a Claude-Code-Action-driven fix loop.
+    Disabled until `ANTHROPIC_API_KEY` is configured and the action is
+    added. Pre-flight guard only requires the API key for this template
+    so the deterministic ones run on the current secret set.
+
+- **`regenerate-misaligned-distractors.yml`** — standalone Geri-specific
+  fix. Triggered by Tier 1 when `probe_distractor_alignment` finds
+  `DIS[k]` empty-slot ≠ `Q[k].c`. Clones Geri, drops misaligned entries,
+  regenerates via the Toranot proxy (Haiku 4.5, 6 workers), bumps the
+  version trinity, runs `tests/distractorsDrift.test.js`, opens a PR.
+  Wall time ~30–60 min, ~$10 spend. Resumable on retry. Proven on the
+  early-exit path 2026-04-28 (3833 aligned/0 misaligned → exit 0
+  cleanly).
+
+#### Trust ladder for new templates
+
+New auto-fix templates start as **manual-only** (added to the workflow but
+*not* added to `AUTO_DISPATCH_TEMPLATES`). Once they've proven safe under
+manual dispatch — clean diffs, no false positives, well-bounded blast
+radius — they get promoted into the allowlist and Tier 1 starts dispatching
+them automatically. Kill switch: set `AUTO_DISPATCH_DISABLED=1` in the
+cron env to revert all auto-dispatch to manual without a code change.
 
 ### Tier 3 — planned
 
