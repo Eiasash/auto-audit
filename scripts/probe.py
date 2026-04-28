@@ -357,6 +357,68 @@ def probe_sibling_drift() -> list[dict[str, Any]]:
     return issues
 
 
+# Per-repo location of syllabus_data.json. The Vite-modular siblings
+# (FM, Pnimit) keep it next to the algorithm; the single-file PWA (Geri)
+# keeps it under data/ alongside the other runtime JSON.
+STUDY_PLAN_SYLLABUS_PATHS: dict[str, str] = {
+    "FamilyMedicine":   "src/features/study_plan/syllabus_data.json",
+    "InternalMedicine": "src/features/study_plan/syllabus_data.json",
+    "Geriatrics":       "data/syllabus_data.json",
+}
+
+
+def probe_study_plan_parity() -> list[dict[str, Any]]:
+    """Verify the three medical PWAs ship byte-identical syllabus_data.json.
+
+    The frequency-weighted study plan generator (FM v1.9.1+, Pnimit v9.86.0+,
+    Geri v10.46.0+) reads its 24/27/46-topic slice from this fixed JSON. Any
+    drift between repos = users on different apps see different "shared"
+    topic frequencies / Hebrew labels, and the cross-language fixture in
+    each repo's tests starts silently disagreeing with the others.
+
+    Pre-merge state: the file may not exist on `main` for all 3 repos
+    yet (e.g., during a staged rollout where only FM has shipped). If any
+    repo is missing the file, the probe emits a stderr note and skips the
+    parity check entirely rather than firing CRITICAL on every cron tick
+    until the rollout completes. Once all 3 ship, the probe activates
+    automatically — no code change needed.
+
+    Note: only checks `syllabus_data.json`. The algorithm primitives
+    (allocateHours / schedule / render) are guarded per-repo by each
+    app's own cross-language fixture in tests/studyPlanAlgorithm.test.js,
+    which pins them against the canonical Python in
+    `auto-audit/scripts/generate_study_plan.py`. A drift in the algorithm
+    surfaces as a red CI run on the affected repo, not here.
+    """
+    issues: list[dict[str, Any]] = []
+    hashes: dict[str, Optional[str]] = {}
+    for repo, path in STUDY_PLAN_SYLLABUS_PATHS.items():
+        status, data = gh(f"/repos/{OWNER}/{repo}/contents/{path}")
+        if status == 200 and isinstance(data, dict) and "content" in data:
+            blob = base64.b64decode(data["content"])
+            hashes[repo] = hashlib.sha256(blob).hexdigest()[:12]
+        else:
+            hashes[repo] = None
+
+    missing = [r for r, h in hashes.items() if h is None]
+    if missing:
+        sys.stderr.write(
+            f"[study-plan-parity] skipping; syllabus_data.json missing on main in: "
+            f"{missing}. Probe activates once all 3 apps ship the feature.\n"
+        )
+        return issues
+
+    distinct = {h for h in hashes.values() if h is not None}
+    if len(distinct) > 1:
+        issues.append({
+            "severity": "warning",
+            "kind": "study_plan_syllabus_drift",
+            "msg": f"syllabus_data.json differs across the three medical PWAs: {hashes}",
+            "auto_fix": "sibling_sync_syllabus",
+        })
+    return issues
+
+
 # ─────────────────────────── orchestration ────────────────────────────
 
 def run() -> dict[str, Any]:
@@ -365,7 +427,7 @@ def run() -> dict[str, Any]:
         "generated_at": started.isoformat(),
         "tool": "auto-audit Tier 1 monitor",
         "repos": {},
-        "cross_cutting": {"sibling_drift": []},
+        "cross_cutting": {"sibling_drift": [], "study_plan_parity": []},
     }
 
     for repo, cfg in REPO_CONFIG.items():
@@ -429,6 +491,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] sibling drift\n")
     report["cross_cutting"]["sibling_drift"] = probe_sibling_drift()
 
+    sys.stderr.write("[probe] study plan parity\n")
+    report["cross_cutting"]["study_plan_parity"] = probe_study_plan_parity()
+
     return report
 
 
@@ -472,6 +537,13 @@ def render_md(report: dict[str, Any]) -> str:
     if sib:
         lines.append("## 🟡 Cross-cutting: sibling engine drift")
         for i in sib:
+            lines.append(f"- {i['kind']}: {i['msg']}")
+        lines.append("")
+    # Study plan syllabus parity
+    spp = report["cross_cutting"].get("study_plan_parity", [])
+    if spp:
+        lines.append("## 🟡 Cross-cutting: study plan syllabus drift")
+        for i in spp:
             lines.append(f"- {i['kind']}: {i['msg']}")
         lines.append("")
     return "\n".join(lines)
