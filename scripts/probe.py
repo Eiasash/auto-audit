@@ -1229,6 +1229,157 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
 
 # ─────────────────────────── orchestration ────────────────────────────
 
+def probe_tier2_workflows() -> list[dict[str, Any]]:
+    """Monitor Tier 2 auto-fix workflow health.
+
+    Tier 2 comprises the auto-fix workflows in this repo (auto-audit) that
+    open PRs in watched repos. This probe checks:
+    1. Recent auto-fix workflow runs (success/failure rates)
+    2. PRs created by auto-fix workflows (open, merged, closed)
+    3. Auto-fix workflow execution times (detect hangs/timeouts)
+
+    Severity levels:
+    - CRITICAL: Multiple consecutive auto-fix workflow failures
+    - WARNING: Single failure, or PRs stuck open >7 days, or slow execution
+    """
+    issues: list[dict[str, Any]] = []
+
+    # Tier 2 workflow filenames to monitor
+    tier2_workflows = [
+        "auto-fix.yml",
+        "regenerate-misaligned-distractors.yml",
+    ]
+
+    for wf_file in tier2_workflows:
+        # Fetch recent runs (last 10)
+        sc, data = gh(
+            f"/repos/{OWNER}/auto-audit/actions/workflows/{wf_file}/runs?per_page=10"
+        )
+        if sc != 200 or not isinstance(data, dict):
+            issues.append({
+                "severity": "error",
+                "kind": "tier2_workflow_fetch_failed",
+                "msg": f"Failed to fetch Tier 2 workflow runs for {wf_file}: HTTP {sc}",
+            })
+            continue
+
+        runs = data.get("workflow_runs", [])
+        if not runs:
+            # No runs yet — not an error for newly added workflows
+            continue
+
+        # Check for consecutive failures (similar to probe_workflow_failure_streaks)
+        completed = [r for r in runs if r.get("status") == "completed"]
+        if len(completed) >= 3:
+            fail_concls = {"failure", "timed_out", "startup_failure", "cancelled"}
+            recent_3 = completed[:3]
+            if all(r.get("conclusion") in fail_concls for r in recent_3):
+                latest = recent_3[0]
+                wf_name = latest.get("name") or wf_file
+                issues.append({
+                    "severity": "critical",
+                    "kind": "tier2_workflow_failure_streak",
+                    "msg": (
+                        f"Tier 2 workflow {wf_name} has failed 3 consecutive runs. "
+                        f"Auto-fix is degraded. Latest: {latest.get('html_url', '?')}"
+                    ),
+                    "url": latest.get("html_url"),
+                })
+
+        # Check most recent run for single failure (warning only)
+        if completed:
+            latest = completed[0]
+            if latest.get("conclusion") in {"failure", "timed_out"}:
+                # Only warn if not already covered by streak detection
+                if len(completed) < 3 or not all(
+                    r.get("conclusion") in {"failure", "timed_out", "startup_failure", "cancelled"}
+                    for r in completed[:3]
+                ):
+                    wf_name = latest.get("name") or wf_file
+                    issues.append({
+                        "severity": "warning",
+                        "kind": "tier2_workflow_failure",
+                        "msg": (
+                            f"Tier 2 workflow {wf_name} failed on latest run. "
+                            f"Run: {latest.get('html_url', '?')}"
+                        ),
+                        "url": latest.get("html_url"),
+                    })
+
+            # Check for slow execution (>20 min for auto-fix, >90 min for distractor regen)
+            if latest.get("conclusion") == "success":
+                created = latest.get("created_at")
+                updated = latest.get("updated_at")
+                if created and updated:
+                    try:
+                        from datetime import datetime as _dt
+                        c_dt = _dt.fromisoformat(created.replace("Z", "+00:00"))
+                        u_dt = _dt.fromisoformat(updated.replace("Z", "+00:00"))
+                        duration_min = (u_dt - c_dt).total_seconds() / 60.0
+
+                        # Different thresholds per workflow
+                        if "regenerate-misaligned-distractors" in wf_file:
+                            threshold = 90  # Expected ~30-60 min, warn at 90
+                        else:
+                            threshold = 20  # auto-fix.yml expected <10 min, warn at 20
+
+                        if duration_min > threshold:
+                            wf_name = latest.get("name") or wf_file
+                            issues.append({
+                                "severity": "warning",
+                                "kind": "tier2_workflow_slow",
+                                "msg": (
+                                    f"Tier 2 workflow {wf_name} took {duration_min:.0f} min "
+                                    f"(threshold: {threshold} min). Check for performance issues."
+                                ),
+                                "url": latest.get("html_url"),
+                            })
+                    except Exception as e:
+                        sys.stderr.write(f"[tier2] duration calc failed for {wf_file}: {e}\n")
+
+    # Check for stale auto-fix PRs (PRs from auto-audit-bot stuck open >7 days)
+    # Query across all watched repos for PRs by the bot
+    for repo in REPO_CONFIG.keys():
+        sc, data = gh(
+            f"/repos/{OWNER}/{repo}/pulls?state=open&per_page=20"
+        )
+        if sc != 200 or not isinstance(data, dict):
+            continue
+
+        for pr in data if isinstance(data, list) else []:
+            # Check if PR is from auto-audit bot
+            author = pr.get("user", {}).get("login", "")
+            if "auto-audit-bot" not in author and "Claude" not in author:
+                continue
+
+            # Check if PR has "auto-fix" in title
+            title = pr.get("title", "")
+            if "auto-fix" not in title.lower():
+                continue
+
+            # Check age
+            created = pr.get("created_at")
+            if created:
+                try:
+                    from datetime import datetime as _dt
+                    c_dt = _dt.fromisoformat(created.replace("Z", "+00:00"))
+                    age_days = (datetime.now(timezone.utc) - c_dt).days
+                    if age_days > 7:
+                        issues.append({
+                            "severity": "warning",
+                            "kind": "tier2_stale_pr",
+                            "msg": (
+                                f"Auto-fix PR in {repo} has been open for {age_days} days: "
+                                f"{title}. Review and merge or close."
+                            ),
+                            "url": pr.get("html_url"),
+                        })
+                except Exception as e:
+                    sys.stderr.write(f"[tier2] PR age calc failed: {e}\n")
+
+    return issues
+
+
 def probe_scheduler_health() -> list[dict[str, Any]]:
     """Self-check: did the previous Tier 1 cron tick happen on time?
 
@@ -1298,6 +1449,7 @@ def run() -> dict[str, Any]:
             "study_plan_parity": [],
             "study_plan_rpc": [],
             "backup_get_rpc": [],
+            "tier2_health": [],
         },
     }
 
@@ -1388,6 +1540,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
 
+    sys.stderr.write("[probe] tier2 health\n")
+    report["cross_cutting"]["tier2_health"] = probe_tier2_workflows()
+
     return report
 
 
@@ -1464,6 +1619,15 @@ def render_md(report: dict[str, Any]) -> str:
         lines.append("## 🟡 Cross-cutting: GHA scheduler drift")
         for i in sched:
             lines.append(f"- [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # Tier 2 health (auto-fix workflow monitoring)
+    tier2 = report["cross_cutting"].get("tier2_health", [])
+    if tier2:
+        worst = "🔴" if any(i.get("severity") == "critical" for i in tier2) else "🟡"
+        lines.append(f"## {worst} Cross-cutting: Tier 2 auto-fix health")
+        for i in tier2:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
         lines.append("")
     return "\n".join(lines)
 
