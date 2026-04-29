@@ -701,6 +701,19 @@ STUDY_PLAN_RPC_APPS: tuple[str, ...] = ("geri", "pnimit", "mishpacha")
 # expected happy-path branch on study_plan_get for a non-existent user.
 STUDY_PLAN_RPC_SENTINEL = "__auto_audit_healthcheck__"
 
+# backup_get(p_app, p_id) — Phase 2 of backups RLS tightening, shipped
+# 2026-04-29 across Geri #112 / Pnimit #53 / FM #18. Public SELECT was
+# dropped on the three *_backups tables; the only read path is now this
+# SECURITY DEFINER RPC. Whitelist must match the function body's
+# `RAISE EXCEPTION USING ERRCODE='22023'` branch. Note 'samega' is the
+# legacy alias for Geri (Shlav A Mega) — both must work because the
+# Geri client may send either, and the table is named `samega_backups`.
+BACKUPS_RPC_APPS: tuple[str, ...] = ("mishpacha", "pnimit", "geri", "samega")
+# Sentinel id for the smoke read. Choose something that will never match
+# a real backup id (the PWAs use either the cloud uid or a random
+# per-device id, neither of which can collide with this dunder string).
+BACKUPS_RPC_SENTINEL_ID = "__auto_audit_healthcheck_nonexistent__"
+
 
 def probe_study_plan_parity() -> list[dict[str, Any]]:
     """Verify the three medical PWAs ship byte-identical syllabus_data.json.
@@ -991,6 +1004,229 @@ def probe_study_plan_rpc() -> list[dict[str, Any]]:
     return issues
 
 
+def probe_backup_get_rpc() -> list[dict[str, Any]]:
+    """Smoke-test the backup_get(p_app, p_id) RPC for each whitelisted app.
+
+    Phase 2 of the backups RLS tightening (shipped 2026-04-29) dropped the
+    public SELECT policies on `mishpacha_backups`, `pnimit_backups`, and
+    `samega_backups`. The ONLY read path now is this SECURITY DEFINER
+    RPC. If it breaks, every "restore from cloud" tap across all three
+    PWAs returns "no backup found" silently — a particularly bad failure
+    mode because the user trusts the empty result.
+
+    The probe runs four positive cases (one per whitelisted app) and one
+    negative case:
+
+      Positive (each of mishpacha / pnimit / geri / samega):
+        Request:  POST /rpc/backup_get  body={p_app:<app>, p_id:<sentinel>}
+        Expect:   HTTP 200, body=null  (sentinel id has no row)
+        Catches:  RPC unreachable (HTTP 5xx), table-name mapping bug
+                  inside the RPC body (would raise a SQL error → HTTP 500
+                  instead of returning null), whitelist drift on this app.
+
+      Negative (p_app='__auto_audit_invalid_app__'):
+        Request:  POST /rpc/backup_get  body={p_app:'__auto_audit_invalid_app__',p_id:'x'}
+        Expect:   HTTP 4xx, body.code='22023'
+        Catches:  Whitelist enforcement was loosened or removed — a regression
+                  that would let arbitrary app strings through to the dynamic
+                  table lookup, exposing tables that shouldn't be readable.
+
+    Why no write+read round-trip: anon INSERT is RLS-blocked (intentional;
+    we proved that during probe design). Without service-role credentials,
+    the smoke is the strongest assertion possible — and it's actually
+    sufficient because a wrong table-name mapping in the RPC body would
+    raise a Postgres `relation does not exist` error (HTTP 500), not
+    silently return null. The smoke catches that.
+
+    Detected drift modes:
+      - HTTP 5xx on a positive case  → critical (RPC body broken /
+                                       table-name mapping wrong)
+      - HTTP 4xx on a positive case  → critical (RPC permissions broken
+                                       or whitelist removed this app)
+      - body != null on positive     → warning (sentinel polluted —
+                                       someone wrote __auto_audit_…)
+      - HTTP 200 on negative case    → critical (whitelist enforcement
+                                       removed; arbitrary apps pass through)
+      - HTTP 4xx but code != '22023' → warning (function still rejects
+                                       invalid apps, but the contract
+                                       (ERRCODE 22023) drifted)
+      - network / DNS                 → warning
+    """
+    issues: list[dict[str, Any]] = []
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + "/rest/v1/rpc/backup_get"
+
+    def _call(p_app: str, p_id: str) -> tuple[int, str, Any]:
+        """Returns (status, raw_body, parsed_json_or_None)."""
+        body = json.dumps({"p_app": p_app, "p_id": p_id}).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "apikey": STUDY_PLAN_SUPABASE_KEY,
+                "Authorization": f"Bearer {STUDY_PLAN_SUPABASE_KEY}",
+                "User-Agent": USER_AGENT,
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                raw = resp.read().decode("utf-8", errors="replace")
+                status = resp.getcode()
+        except urllib.error.HTTPError as e:
+            # 4xx/5xx land here — capture the body so we can read the
+            # ERRCODE and message that postgrest surfaces.
+            status = e.code
+            try:
+                raw = e.read().decode("utf-8", errors="replace")
+            except Exception:
+                raw = ""
+        try:
+            parsed = json.loads(raw) if raw else None
+        except json.JSONDecodeError:
+            parsed = None
+        return status, raw, parsed
+
+    # ── Positive cases — one per whitelisted app ─────────────────────
+    for app_key in BACKUPS_RPC_APPS:
+        try:
+            status, raw, parsed = _call(app_key, BACKUPS_RPC_SENTINEL_ID)
+        except (urllib.error.URLError, TimeoutError) as e:
+            issues.append({
+                "severity": "warning",
+                "kind": "backup_get_rpc_network",
+                "msg": f"backup_get(p_app='{app_key}') network error: {e}",
+            })
+            continue
+        except Exception as e:  # pragma: no cover — belt and suspenders
+            issues.append({
+                "severity": "warning",
+                "kind": "backup_get_rpc_unexpected",
+                "msg": f"backup_get(p_app='{app_key}') unexpected error: {e}",
+            })
+            continue
+
+        if 500 <= status < 600:
+            # Most likely cause: RPC body references a table that doesn't
+            # exist for this app (table-name mapping bug). The Phase 2
+            # rollout used `<p_app>_backups` for mishpacha/pnimit/samega
+            # — `geri` is whitelisted as an alias but reads from
+            # `samega_backups` inside the function body. If that aliasing
+            # ever drifts, we'd see HTTP 500 here.
+            issues.append({
+                "severity": "critical",
+                "kind": "backup_get_rpc_server_error",
+                "msg": (
+                    f"backup_get(p_app='{app_key}') returned HTTP {status} — "
+                    f"likely a table-name mapping bug inside the RPC body "
+                    f"(check the alias resolution for 'geri' → samega_backups). "
+                    f"Body: {raw[:200]!r}"
+                ),
+            })
+            continue
+
+        if 400 <= status < 500:
+            # The function returned an error for an app we documented as
+            # whitelisted. Either the whitelist was tightened (regression)
+            # or anon's GRANT EXECUTE was revoked.
+            errcode = parsed.get("code") if isinstance(parsed, dict) else None
+            issues.append({
+                "severity": "critical",
+                "kind": "backup_get_rpc_whitelist_drift",
+                "msg": (
+                    f"backup_get(p_app='{app_key}') returned HTTP {status} "
+                    f"(ERRCODE={errcode!r}). The documented whitelist is "
+                    f"{list(BACKUPS_RPC_APPS)}; check that the function body "
+                    f"and the GRANT EXECUTE on anon both still cover '{app_key}'."
+                ),
+            })
+            continue
+
+        if status != 200:
+            issues.append({
+                "severity": "warning",
+                "kind": "backup_get_rpc_unexpected_status",
+                "msg": f"backup_get(p_app='{app_key}') returned HTTP {status} (expected 200).",
+            })
+            continue
+
+        # HTTP 200 — postgrest serializes a SQL `null` return as the JSON
+        # literal `null`. anything else means the sentinel id has been
+        # written to that app's table, which is suspicious (probe-design
+        # invariant: this id must never collide with a real backup).
+        if parsed is not None:
+            issues.append({
+                "severity": "warning",
+                "kind": "backup_get_rpc_sentinel_polluted",
+                "msg": (
+                    f"backup_get(p_app='{app_key}', p_id='{BACKUPS_RPC_SENTINEL_ID}') "
+                    f"returned a non-null body. The sentinel id should never match a "
+                    f"real backup. Likely cause: someone manually inserted a row with "
+                    f"this id into {app_key}_backups (or samega_backups for geri). "
+                    f"Delete the row to keep the probe a true smoke test. "
+                    f"Body: {raw[:120]!r}"
+                ),
+            })
+
+    # ── Negative case — invalid app must be rejected with ERRCODE 22023
+    try:
+        status, raw, parsed = _call("__auto_audit_invalid_app__", "x")
+    except (urllib.error.URLError, TimeoutError):
+        # Network failure on the negative case — already reported by the
+        # positive loop above if it's a global outage. Don't double-warn.
+        return issues
+    except Exception:
+        return issues
+
+    if status == 200:
+        # The function accepted an obviously-invalid app and returned a row
+        # (or null). That's a critical regression — the whitelist was
+        # bypassed or removed. An attacker with the publishable key could
+        # then enumerate any table whose name matches `<app>_backups`.
+        issues.append({
+            "severity": "critical",
+            "kind": "backup_get_rpc_whitelist_bypassed",
+            "msg": (
+                f"backup_get(p_app='__auto_audit_invalid_app__') returned HTTP 200 — "
+                f"the whitelist enforcement is gone. Any string matching "
+                f"`<app>_backups` could now be read. Re-deploy the function with "
+                f"the documented `IF p_app NOT IN (...)` guard."
+            ),
+        })
+        return issues
+
+    if 400 <= status < 500:
+        errcode = parsed.get("code") if isinstance(parsed, dict) else None
+        if errcode != "22023":
+            # The function still rejects the invalid app, but with a different
+            # error code than documented. Not critical (security still holds)
+            # but worth flagging because clients catching '22023' specifically
+            # would now miss this branch.
+            issues.append({
+                "severity": "warning",
+                "kind": "backup_get_rpc_errcode_drift",
+                "msg": (
+                    f"backup_get rejected an invalid app with ERRCODE={errcode!r} "
+                    f"(documented: '22023'). Whitelist enforcement still holds, but "
+                    f"clients matching on '22023' will fall through to a generic "
+                    f"error path. Either restore the documented ERRCODE or update "
+                    f"this probe + client error handlers."
+                ),
+            })
+        # else: errcode == '22023' → happy path, no issue
+    else:
+        issues.append({
+            "severity": "warning",
+            "kind": "backup_get_rpc_negative_unexpected",
+            "msg": (
+                f"backup_get(invalid app) returned HTTP {status} — expected 4xx. "
+                f"Body: {raw[:120]!r}"
+            ),
+        })
+
+    return issues
+
+
 # ─────────────────────────── orchestration ────────────────────────────
 
 def probe_scheduler_health() -> list[dict[str, Any]]:
@@ -1061,6 +1297,7 @@ def run() -> dict[str, Any]:
             "sibling_drift": [],
             "study_plan_parity": [],
             "study_plan_rpc": [],
+            "backup_get_rpc": [],
         },
     }
 
@@ -1145,6 +1382,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] study plan rpc smoke\n")
     report["cross_cutting"]["study_plan_rpc"] = probe_study_plan_rpc()
 
+    sys.stderr.write("[probe] backup_get rpc smoke\n")
+    report["cross_cutting"]["backup_get_rpc"] = probe_backup_get_rpc()
+
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
 
@@ -1206,6 +1446,15 @@ def render_md(report: dict[str, Any]) -> str:
         worst = "🔴" if any(i.get("severity") == "critical" for i in spr) else "🟡"
         lines.append(f"## {worst} Cross-cutting: study plan RPC smoke")
         for i in spr:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # backup_get RPC smoke (Phase 2 read path — only way to restore from cloud)
+    bgr = report["cross_cutting"].get("backup_get_rpc", [])
+    if bgr:
+        worst = "🔴" if any(i.get("severity") == "critical" for i in bgr) else "🟡"
+        lines.append(f"## {worst} Cross-cutting: backup_get RPC smoke")
+        for i in bgr:
             tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
             lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
         lines.append("")
@@ -1473,6 +1722,16 @@ def main() -> int:
             "migration on `public.study_plan_get` / `study_plan_upsert` in "
             "Supabase project `krmlzwwelqvlfslwltol`. The whitelist must "
             "match `STUDY_PLAN_RPC_APPS` in `scripts/probe.py`.",
+            "* For `backup_get_rpc_*`: read path for the Phase 2 backups "
+            "RLS tightening. Check `public.backup_get(p_app, p_id)` in "
+            "Supabase project `krmlzwwelqvlfslwltol`. Whitelist must match "
+            "`BACKUPS_RPC_APPS` (`mishpacha`, `pnimit`, `geri`, `samega`); "
+            "GRANT EXECUTE must include anon. If `_server_error`, the "
+            "function body is broken — most likely the dynamic table-name "
+            "lookup tried to read a non-existent table (e.g. `geri_backups` "
+            "instead of `samega_backups`). If `_whitelist_bypassed`, the "
+            "`IF p_app NOT IN (...)` guard was removed and ANY app string "
+            "is now passed through to the lookup — fix immediately.",
             "* Close this issue once the next probe (≤30 min) reports green.",
         ]
         file_issue("auto-audit", title, "\n".join(body_lines), ["auto-audit", "cross-cutting"])
