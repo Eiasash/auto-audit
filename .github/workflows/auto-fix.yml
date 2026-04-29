@@ -114,8 +114,32 @@ jobs:
               fi
               ;;
             Geriatrics)
+              # Capture the OLD version BEFORE rewriting anything — we'll need it
+              # to find/replace hardcoded literals in test files that pin the
+              # current shipping version as a tripwire.
+              OLD_VER=$(grep -oE "shlav-a-v[0-9]+\.[0-9]+\.[0-9]+" sw.js | head -1 | sed 's/^shlav-a-v//')
+              echo "Geri OLD_VER=$OLD_VER → APP_VER=$APP_VER"
               sed -i -E "s/(APP_VERSION\s*=\s*')[^']+(')/\1${APP_VER}\2/" shlav-a-mega.html
               sed -i -E "s/(CACHE\s*=\s*'shlav-a-v)[^']+(')/\1${APP_VER}\2/" sw.js
+              # Geri has TWO version-trinity test files, NOT one (caught us in the
+              # v10.59.0 incident on 2026-04-29 — only appIntegrity was patched, but
+              # tests/visualOverhaul2026.test.js also pins the version literally and
+              # left main red until v10.60.0). Bump both. appIntegrity does dynamic
+              # comparison so it has no literal version pins; visualOverhaul2026 is
+              # the literal-pin tripwire. We rewrite OLD_VER → APP_VER everywhere it
+              # appears so that test names ("is 10.60.0"), regexes, and toBe() assertions
+              # all flip in lockstep. Scoped to test files only — won't touch comments
+              # in source code that reference past versions.
+              if [ -n "$OLD_VER" ] && [ "$OLD_VER" != "$APP_VER" ]; then
+                for tf in tests/visualOverhaul2026.test.js tests/appIntegrity.test.js; do
+                  if [ -f "$tf" ]; then
+                    # Escape dots for sed: 10.60.0 → 10\.60\.0 in the search pattern
+                    OLD_RE=$(echo "$OLD_VER" | sed 's/\./\\./g')
+                    sed -i -E "s/${OLD_RE}/${APP_VER}/g" "$tf"
+                    echo "  patched: $tf"
+                  fi
+                done
+              fi
               ;;
             *)
               echo "::error::version_trinity not implemented for ${{ inputs.target_repo }}"; exit 1
