@@ -914,6 +914,64 @@ def probe_study_plan_rpc() -> list[dict[str, Any]]:
 
 # ─────────────────────────── orchestration ────────────────────────────
 
+def probe_scheduler_health() -> list[dict[str, Any]]:
+    """Self-check: did the previous Tier 1 cron tick happen on time?
+
+    GHA scheduled workflows drift on free/low-tier accounts under load
+    (documented behaviour). When the cron runs more than 60 min after
+    the previous run, raise a warning so we know the scheduler itself
+    is unhealthy — separate from any real CI/deploy issue.
+
+    Looks at this workflow's own run history. Skips the check when the
+    triggering event isn't 'schedule' (e.g. workflow_dispatch / repository_dispatch
+    runs aren't expected on a clock).
+
+    Heartbeat thresholds:
+      - delta <= 35 min  : healthy (cron is on time, with small drift)
+      - 35 < delta <= 60 : silent (mild drift, no issue raised)
+      - 60 < delta       : warning (the scheduler is dropping ticks)
+    """
+    issues: list[dict[str, Any]] = []
+    event = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event != "schedule":
+        return issues
+
+    # Self-introspect via gh API. The current run's workflow file is
+    # health-check.yml; query its prior runs and compare timestamps.
+    try:
+        status, data = gh("/repos/{}/{}/actions/workflows/health-check.yml/runs?per_page=5".format(OWNER, "auto-audit"))
+        if status != 200:
+            return issues
+        runs = data.get("workflow_runs", [])
+        # The current run is the first entry; we want the previous SCHEDULED run.
+        prev_scheduled = None
+        for r in runs[1:]:
+            if r.get("event") == "schedule":
+                prev_scheduled = r
+                break
+        if not prev_scheduled:
+            return issues
+        from datetime import datetime as _dt
+        now = datetime.now(timezone.utc)
+        prev = _dt.fromisoformat(prev_scheduled["created_at"].replace("Z", "+00:00"))
+        delta_min = (now - prev).total_seconds() / 60.0
+        if delta_min > 60:
+            issues.append({
+                "severity": "warning",
+                "kind": "scheduler-drift",
+                "msg": (
+                    f"GHA scheduler dropped ticks: previous Tier 1 schedule run was "
+                    f"{delta_min:.0f} min ago (expected ≤ 30). Repository_dispatch path "
+                    f"(issue #14) is the durable fix — verify AUTO_AUDIT_DISPATCH_PAT "
+                    f"is set in all 4 watched repos."
+                ),
+                "url": f"https://github.com/{OWNER}/auto-audit/actions/workflows/health-check.yml",
+            })
+    except Exception as e:
+        sys.stderr.write(f"[probe] scheduler_health failed: {e}\n")
+    return issues
+
+
 def run() -> dict[str, Any]:
     started = datetime.now(timezone.utc)
     report: dict[str, Any] = {
@@ -1005,6 +1063,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] study plan rpc smoke\n")
     report["cross_cutting"]["study_plan_rpc"] = probe_study_plan_rpc()
 
+    sys.stderr.write("[probe] scheduler health\n")
+    report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
+
     return report
 
 
@@ -1065,6 +1126,13 @@ def render_md(report: dict[str, Any]) -> str:
         for i in spr:
             tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
             lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # Scheduler-health self-probe (catches GHA cron drift before it bites us).
+    sched = report["cross_cutting"].get("scheduler_health", [])
+    if sched:
+        lines.append("## 🟡 Cross-cutting: GHA scheduler drift")
+        for i in sched:
+            lines.append(f"- [{i['kind']}] {i['msg']}")
         lines.append("")
     return "\n".join(lines)
 
