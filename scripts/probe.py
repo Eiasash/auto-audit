@@ -1399,6 +1399,164 @@ def probe_dispatch_chain_health() -> list[dict[str, Any]]:
     return issues
 
 
+# ward_helper_pull_by_username RPC — added 2026-04-29 alongside the
+# ward_helper_backup.username column (option 2 hybrid bridge: cross-device
+# restore via app_users login). The RPC bypasses the auth.uid()-based RLS
+# SELECT policy because cross-device pulls cross the auth.uid() boundary.
+WARD_HELPER_PULL_RPC = "ward_helper_pull_by_username"
+WARD_HELPER_PULL_SENTINEL = "__auto_audit_healthcheck_nonexistent__"
+
+
+def probe_ward_helper_pull_rpc() -> list[dict[str, Any]]:
+    """Smoke-test the ward_helper_pull_by_username(p_username) RPC.
+
+    The 2026-04-29 option 2 bridge added a SECURITY DEFINER RPC that lets
+    an authed ward-helper user fetch their encrypted backup blobs from any
+    device. It's the ONLY cross-device restore path for ward-helper —
+    direct REST SELECT remains RLS-locked to the per-device anon
+    auth.users.id, which would return nothing on a fresh device.
+
+    If the RPC breaks, every "log in on a new device → see my history"
+    flow silently fails with an empty restore. Same failure-mode shape
+    as backup_get_rpc for the PWAs, same probe shape.
+
+    Two cases:
+      Positive: pull by a known-nonexistent username
+        Expect: HTTP 200, body=[]
+        Catches: RPC unreachable (HTTP 5xx), GRANT EXECUTE revoked
+                 (HTTP 4xx), table reference broken (HTTP 5xx).
+      Sentinel: same call, asserts no row matches the dunder username
+        Catches: someone manually inserted a sentinel row → probe is
+                 polluted; clean it up.
+
+    Why no negative case (cf. backup_get): backup_get has a strict
+    whitelist that raises ERRCODE 22023 on invalid app, so probing the
+    rejection branch is meaningful. ward_helper_pull_by_username takes
+    a free-form text username — there's no whitelist to test, by design
+    (the cap is "knowing the username" + encryption).
+
+    Why no write+read round-trip: the table has a FOREIGN KEY constraint
+    `user_id REFERENCES auth.users(id)`. We can't insert a sentinel row
+    via anon REST without minting a real auth.users row first, and
+    auth.signInAnonymously() is a JS-client API the probe doesn't have.
+    The smoke (RPC reachable + returns empty for unknown username) is
+    sufficient because a broken table reference inside the RPC would
+    raise HTTP 500, not silently return [].
+    """
+    issues: list[dict[str, Any]] = []
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + "/rest/v1/rpc/" + WARD_HELPER_PULL_RPC
+
+    body = json.dumps({"p_username": WARD_HELPER_PULL_SENTINEL}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "apikey": STUDY_PLAN_SUPABASE_KEY,
+            # Note: deliberately NOT setting Authorization: Bearer here.
+            # The publishable key in `apikey` resolves to the anon role,
+            # which has GRANT EXECUTE on this RPC.
+            "User-Agent": USER_AGENT,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            status = resp.getcode()
+    except urllib.error.HTTPError as e:
+        status = e.code
+        try:
+            raw = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            raw = ""
+    except (urllib.error.URLError, TimeoutError) as e:
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_network",
+            "msg": f"{WARD_HELPER_PULL_RPC} network error: {e}",
+        })
+        return issues
+    except Exception as e:  # pragma: no cover — belt and suspenders
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_unexpected",
+            "msg": f"{WARD_HELPER_PULL_RPC} unexpected error: {e}",
+        })
+        return issues
+
+    if 500 <= status < 600:
+        # Most likely cause: the RPC body references a column or table
+        # that no longer exists (schema drift). For instance, if a future
+        # migration drops the username column or rotates ward_helper_backup
+        # to a new name, the RPC would throw `relation does not exist` or
+        # `column does not exist` here.
+        issues.append({
+            "severity": "critical",
+            "kind": "ward_helper_pull_rpc_server_error",
+            "msg": (
+                f"{WARD_HELPER_PULL_RPC} returned HTTP {status} — likely a "
+                f"schema drift breaking the function body (column or table "
+                f"reference invalid). Body: {raw[:200]!r}"
+            ),
+        })
+        return issues
+
+    if 400 <= status < 500:
+        # The function returned an error for what should be an open RPC.
+        # Almost certainly: GRANT EXECUTE was revoked, or the function
+        # was dropped.
+        issues.append({
+            "severity": "critical",
+            "kind": "ward_helper_pull_rpc_permission_drift",
+            "msg": (
+                f"{WARD_HELPER_PULL_RPC} returned HTTP {status}. Either the "
+                f"RPC was dropped or anon GRANT EXECUTE was revoked. Body: "
+                f"{raw[:200]!r}"
+            ),
+        })
+        return issues
+
+    if status != 200:
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_unexpected_status",
+            "msg": f"{WARD_HELPER_PULL_RPC} returned HTTP {status} (expected 200).",
+        })
+        return issues
+
+    # HTTP 200 — postgrest serializes a setof-returning function as a
+    # JSON array. Empty array is the happy path for a nonexistent username.
+    try:
+        parsed = json.loads(raw) if raw else None
+    except json.JSONDecodeError:
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_bad_json",
+            "msg": f"{WARD_HELPER_PULL_RPC} returned non-JSON body ({raw[:120]!r}).",
+        })
+        return issues
+
+    if parsed != []:
+        # Either the sentinel got polluted by manual writes, OR the RPC
+        # is returning something it shouldn't (e.g. ignoring the WHERE
+        # clause and dumping all rows — a serious leak).
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_sentinel_polluted",
+            "msg": (
+                f"{WARD_HELPER_PULL_RPC}(p_username='{WARD_HELPER_PULL_SENTINEL}') "
+                f"returned a non-empty body. Either someone wrote a row with "
+                f"username='{WARD_HELPER_PULL_SENTINEL}' (clean it up) OR the "
+                f"function is no longer filtering correctly (audit the WHERE "
+                f"clause — could be a data leak). Body shape: "
+                f"{type(parsed).__name__}, len={len(parsed) if hasattr(parsed, '__len__') else '?'}"
+            ),
+        })
+
+    return issues
+
+
 # ─────────────────────────── orchestration ────────────────────────────
 
 def probe_scheduler_health() -> list[dict[str, Any]]:
@@ -1471,6 +1629,7 @@ def run() -> dict[str, Any]:
             "study_plan_rpc": [],
             "backup_get_rpc": [],
             "dispatch_chain": [],
+            "ward_helper_pull_rpc": [],
         },
     }
 
@@ -1561,6 +1720,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] dispatch chain health\n")
     report["cross_cutting"]["dispatch_chain"] = probe_dispatch_chain_health()
 
+    sys.stderr.write("[probe] ward_helper pull rpc smoke\n")
+    report["cross_cutting"]["ward_helper_pull_rpc"] = probe_ward_helper_pull_rpc()
+
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
 
@@ -1640,6 +1802,15 @@ def render_md(report: dict[str, Any]) -> str:
         worst = "🔴" if any(i.get("severity") == "critical" for i in dch) else "🟡"
         lines.append(f"## {worst} Cross-cutting: post-merge dispatch chain")
         for i in dch:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # ward_helper_pull_by_username RPC smoke (cross-device restore path)
+    whp = report["cross_cutting"].get("ward_helper_pull_rpc", [])
+    if whp:
+        worst = "🔴" if any(i.get("severity") == "critical" for i in whp) else "🟡"
+        lines.append(f"## {worst} Cross-cutting: ward_helper pull-by-username RPC")
+        for i in whp:
             tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
             lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
         lines.append("")
@@ -1927,6 +2098,17 @@ def main() -> int:
             "repo lost `.github/workflows/notify-auto-audit.yml`. Restore "
             "it from any sibling watched repo — the file is identical "
             "across all four.",
+            "* For `ward_helper_pull_rpc_*`: the cross-device restore path "
+            "for ward-helper (option 2 hybrid bridge, 2026-04-29). Check "
+            "`public.ward_helper_pull_by_username(p_username)` in Supabase "
+            "project `krmlzwwelqvlfslwltol`. If `_server_error`, the "
+            "function body's WHERE clause references a column that drifted "
+            "(most likely the `username` column on ward_helper_backup "
+            "was dropped or renamed). If `_permission_drift`, GRANT EXECUTE "
+            "was revoked on anon — re-grant with `GRANT EXECUTE ON FUNCTION "
+            "public.ward_helper_pull_by_username(text) TO anon, authenticated;`. "
+            "If `_sentinel_polluted` AND the sentinel id matches the dunder, "
+            "delete via SQL (table has no anon DELETE policy).",
             "* Close this issue once the next probe (≤30 min) reports green.",
         ]
         file_issue("auto-audit", title, "\n".join(body_lines), ["auto-audit", "cross-cutting"])
