@@ -7,6 +7,11 @@ on:
     # missed the v10.59.0 ship's CI-red on Geri main 2026-04-29. GHA free-tier
     # cost of 48 runs/day vs old 35/day is trivial; coverage is the win.
     - cron: '*/30 * * * *'
+  # Each watched repo (Geri/Pnimit/Mishpacha/ward-helper) fires this dispatch
+  # via its own .github/workflows/notify-auto-audit.yml on push-to-main.
+  # Closes the up-to-30-min cron gap to seconds-after-merge. See issue #14.
+  repository_dispatch:
+    types: [watched-repo-merge]
   workflow_dispatch:
     inputs:
       dry_run:
