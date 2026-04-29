@@ -754,6 +754,85 @@ def probe_study_plan_parity() -> list[dict[str, Any]]:
     return issues
 
 
+def probe_honest_stats_parity() -> list[dict[str, Any]]:
+    """Verify each medical PWA ships tests/honestStats.test.js with the
+    required structural markers.
+
+    The honestStats CI guard (added 2026-04-29 across the 3 PWAs) codifies
+    the principle: scoring functions returning percentages MUST return null
+    on sparse/empty input, not a confident-looking default.
+
+    The three test files aren't byte-identical (each repo has slightly
+    different module paths and test counts), so a hash-diff like
+    probe_sibling_drift won't work. Instead, this probe asserts each file
+    contains a minimum set of markers — if any repo drifts off the pattern
+    (file deleted, regression test removed, etc.) it warns.
+
+    Required markers (per repo's honestStats.test.js):
+      * 'returns null for completely empty state' — calcEstScore guard
+      * 'REGRESSION' — at least one explicit regression test
+      * 'toBeNull' — assertions that null is the right answer
+      * 'acc=0\\.60' or 'acc\\s*=\\s*0\\.6' as a NEGATIVE-MATCH guard against
+        the original 60% imputation bug
+      * 'takeWeeklySnapshot' or 'tot\\s*>=\\s*[3-9]' — the snapshot
+        threshold guard added in v9.92.1 / v1.17.1 / v10.61.1
+
+    Anything missing → warning. The probe deliberately does not fire CRITICAL
+    on this surface; missing test markers don't mean the code is broken,
+    only that the regression guard has been weakened.
+    """
+    issues: list[dict[str, Any]] = []
+    siblings = ["Geriatrics", "InternalMedicine", "FamilyMedicine"]
+    path = "tests/honestStats.test.js"
+
+    required_markers = [
+        ("empty_state_null", r"returns null for (?:completely )?empty state"),
+        ("regression_marker", r"REGRESSION"),
+        ("null_assertion", r"toBeNull"),
+        ("snapshot_guard", r"takeWeeklySnapshot|tot\s*>=\s*[3-9]"),
+        # The source-level forbidden-pattern guards (acc=0.60, bare R aggregation)
+        # live INSIDE each repo's honestStats.test.js — re-running them here
+        # would fight with the test's own description strings. CI failure on
+        # those guards surfaces via probe_workflows already.
+        ("source_guard_calc_est", r"calcEstScore must NOT contain"),
+        ("source_guard_heatmap", r"must NOT use pure FSRS R aggregation|must NOT use bare FSRS R"),
+    ]
+
+    for repo in siblings:
+        status, data = gh(f"/repos/{OWNER}/{repo}/contents/{path}")
+        if status != 200 or not isinstance(data, dict) or "content" not in data:
+            issues.append({
+                "severity": "warning",
+                "kind": "honest_stats_missing",
+                "repo": repo,
+                "msg": f"{path} missing on main — honestStats CI guard not in place",
+            })
+            continue
+        try:
+            content = base64.b64decode(data["content"]).decode("utf-8")
+        except Exception as e:
+            issues.append({
+                "severity": "warning",
+                "kind": "honest_stats_unreadable",
+                "repo": repo,
+                "msg": f"{path} could not be decoded: {e}",
+            })
+            continue
+
+        # Required markers must be present.
+        for name, pattern in required_markers:
+            if not re.search(pattern, content):
+                issues.append({
+                    "severity": "warning",
+                    "kind": "honest_stats_marker_missing",
+                    "repo": repo,
+                    "msg": f"{path} missing required marker '{name}' (pattern: {pattern})",
+                })
+
+    return issues
+
+
+
 def probe_study_plan_rpc() -> list[dict[str, Any]]:
     """Smoke-test the study_plan_get RPC for each app's documented APP_KEY.
 
@@ -1059,6 +1138,9 @@ def run() -> dict[str, Any]:
 
     sys.stderr.write("[probe] study plan parity\n")
     report["cross_cutting"]["study_plan_parity"] = probe_study_plan_parity()
+
+    sys.stderr.write("[probe] honest stats parity\n")
+    report["cross_cutting"]["honest_stats_parity"] = probe_honest_stats_parity()
 
     sys.stderr.write("[probe] study plan rpc smoke\n")
     report["cross_cutting"]["study_plan_rpc"] = probe_study_plan_rpc()
