@@ -1227,6 +1227,178 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
     return issues
 
 
+# Watched repos that ship `.github/workflows/notify-auto-audit.yml` — the
+# repository_dispatch firing that gives us sub-minute push-to-probe SLA on
+# detecting CI-red main. If this set changes (a new PWA joins the family,
+# or one is retired), update both this list AND the rotation tooling
+# (`scripts/rotate_dispatch_pat.py`'s DEFAULT_REPOS).
+DISPATCH_NOTIFY_REPOS: tuple[str, ...] = (
+    "Geriatrics", "InternalMedicine", "FamilyMedicine", "ward-helper",
+)
+DISPATCH_NOTIFY_WORKFLOW = "notify-auto-audit.yml"
+
+
+def probe_dispatch_chain_health() -> list[dict[str, Any]]:
+    """Detect when the post-merge dispatch chain (auto-audit#14) is broken.
+
+    Each watched PWA ships `.github/workflows/notify-auto-audit.yml` that
+    fires a `repository_dispatch` to Eiasash/auto-audit on every
+    push-to-main. The dispatch needs `AUTO_AUDIT_DISPATCH_PAT` installed
+    as a secret in that repo, scoped Actions:write on auto-audit.
+
+    The 30-min cron is the failsafe. The dispatch path is what gives us
+    ~15s push-to-probe latency. If the dispatch PAT expires (currently a
+    short-lived session PAT — see SESSION_LEARNINGS_2026-04-29 watchlist
+    item #1), the dispatch silently degrades back to cron, and we lose
+    sub-minute SLA WITHOUT any visible signal. This probe is that signal.
+
+    What it checks: for each watched repo, look at the most recent
+    completed run of notify-auto-audit.yml.
+
+      conclusion=='success'   → healthy, no issue
+      conclusion=='failure'   → critical: dispatch broken on this repo
+      conclusion=='cancelled' → warning: someone cancelled the run
+      no completed runs       → warning: workflow exists but never ran
+                                (typical right after first install — fine
+                                if recent; flag if older than 30d)
+      workflow file missing   → critical: notify-auto-audit.yml was
+                                deleted or renamed in this repo
+
+    The single-failure threshold is intentional. `probe_workflow_failure_streaks`
+    requires N consecutive failures across recent runs and is the right
+    tool for noisy-but-eventually-self-healing workflows. notify-auto-audit
+    is neither noisy nor self-healing — its only failure mode is auth
+    (PAT dead/scope drift), which won't recover on its own. The first
+    failed push-to-main IS the signal.
+
+    Why cross_cutting and not per-repo: the typical fix is one PAT
+    rotation that recovers all four repos. Grouping the findings makes
+    that obvious in the issue body and avoids four duplicate-cause issues.
+    """
+    issues: list[dict[str, Any]] = []
+    workflow = DISPATCH_NOTIFY_WORKFLOW
+
+    for repo in DISPATCH_NOTIFY_REPOS:
+        # Pull the 5 most recent runs. We only need the latest *completed*
+        # one — runs in `in_progress` / `queued` are skipped because their
+        # conclusion is null.
+        path = (
+            f"/repos/{OWNER}/{repo}/actions/workflows/{workflow}/runs"
+            f"?per_page=5"
+        )
+        try:
+            status, data = gh(path)
+        except Exception as e:  # pragma: no cover — network/JSON glitches
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_probe_error",
+                "msg": (
+                    f"Could not query notify-auto-audit runs for {repo}: {e}. "
+                    f"Probe is non-fatal — cron failsafe still runs."
+                ),
+            })
+            continue
+
+        if status == 404:
+            # The workflow file is gone. Either the repo was renamed (we'd
+            # see a 404 on the whole repo first), or somebody deleted/
+            # renamed notify-auto-audit.yml. Either way, push-to-probe is
+            # broken for this repo.
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_chain_workflow_missing",
+                "msg": (
+                    f"{repo}: .github/workflows/{workflow} returned 404. "
+                    f"The notify-auto-audit dispatcher is gone — push-to-probe "
+                    f"SLA is broken for this repo (cron failsafe still runs). "
+                    f"Restore the workflow from sibling repo "
+                    f"(e.g. github.com/{OWNER}/Geriatrics/blob/main/.github/workflows/{workflow})."
+                ),
+            })
+            continue
+
+        if status != 200 or not isinstance(data, dict):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_unexpected_status",
+                "msg": (
+                    f"{repo}: GET notify-auto-audit runs returned HTTP {status}. "
+                    f"Probe is non-fatal."
+                ),
+            })
+            continue
+
+        runs = data.get("workflow_runs", []) or []
+
+        if not runs:
+            # No runs ever. Could be: workflow newly added and no merge yet
+            # (fine), or it never wired up (concerning but not critical).
+            # Surface as a one-time warning; future probes will reclassify
+            # once a real run lands.
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_never_ran",
+                "msg": (
+                    f"{repo}: {workflow} has no run history. Workflow exists but "
+                    f"hasn't fired yet — expected if newly installed. If this "
+                    f"persists past the next merge, check the `on: push` trigger."
+                ),
+            })
+            continue
+
+        # First completed run wins. We tolerate an in-flight run at the top.
+        latest_completed = next(
+            (r for r in runs if r.get("conclusion") in ("success", "failure", "cancelled", "timed_out", "action_required")),
+            None,
+        )
+        if not latest_completed:
+            # All recent runs are in_progress or queued. Almost certainly a
+            # transient state right at probe time — fine, will resolve.
+            continue
+
+        conclusion = latest_completed.get("conclusion")
+        run_url = latest_completed.get("html_url", "")
+        head_sha = (latest_completed.get("head_sha") or "")[:8]
+        created = latest_completed.get("created_at", "?")
+
+        if conclusion == "success":
+            # Healthy. No issue.
+            continue
+
+        if conclusion == "failure":
+            # The dispatch step failed — almost certainly the PAT. The
+            # peter-evans/repository-dispatch action surfaces "Bad credentials"
+            # with HTTP 401 when the token is dead, missing, or under-scoped.
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_chain_run_failed",
+                "msg": (
+                    f"{repo}: most recent notify-auto-audit run FAILED "
+                    f"(sha {head_sha}, {created}). Most likely cause: "
+                    f"AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the "
+                    f"Actions:write scope on Eiasash/auto-audit. Push-to-probe "
+                    f"SLA is broken; cron failsafe still runs every 30 min. "
+                    f"Fix: rotate the PAT — see scripts/DISPATCH_PAT_ROTATION.md. "
+                    f"Run: {run_url}"
+                ),
+            })
+            continue
+
+        if conclusion in ("cancelled", "timed_out", "action_required"):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_run_unexpected_conclusion",
+                "msg": (
+                    f"{repo}: most recent notify-auto-audit run finished with "
+                    f"conclusion='{conclusion}' (sha {head_sha}, {created}). "
+                    f"Not necessarily broken — re-trigger on next merge to confirm. "
+                    f"Run: {run_url}"
+                ),
+            })
+
+    return issues
+
+
 # ─────────────────────────── orchestration ────────────────────────────
 
 def probe_scheduler_health() -> list[dict[str, Any]]:
@@ -1298,6 +1470,7 @@ def run() -> dict[str, Any]:
             "study_plan_parity": [],
             "study_plan_rpc": [],
             "backup_get_rpc": [],
+            "dispatch_chain": [],
         },
     }
 
@@ -1385,6 +1558,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] backup_get rpc smoke\n")
     report["cross_cutting"]["backup_get_rpc"] = probe_backup_get_rpc()
 
+    sys.stderr.write("[probe] dispatch chain health\n")
+    report["cross_cutting"]["dispatch_chain"] = probe_dispatch_chain_health()
+
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
 
@@ -1455,6 +1631,15 @@ def render_md(report: dict[str, Any]) -> str:
         worst = "🔴" if any(i.get("severity") == "critical" for i in bgr) else "🟡"
         lines.append(f"## {worst} Cross-cutting: backup_get RPC smoke")
         for i in bgr:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # Dispatch chain health (notify-auto-audit.yml on each watched PWA)
+    dch = report["cross_cutting"].get("dispatch_chain", [])
+    if dch:
+        worst = "🔴" if any(i.get("severity") == "critical" for i in dch) else "🟡"
+        lines.append(f"## {worst} Cross-cutting: post-merge dispatch chain")
+        for i in dch:
             tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
             lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
         lines.append("")
@@ -1732,6 +1917,16 @@ def main() -> int:
             "instead of `samega_backups`). If `_whitelist_bypassed`, the "
             "`IF p_app NOT IN (...)` guard was removed and ANY app string "
             "is now passed through to the lookup — fix immediately.",
+            "* For `dispatch_chain_run_failed`: the post-merge "
+            "repository_dispatch chain is broken. The 30-min cron failsafe "
+            "still runs, but sub-minute push-to-probe SLA is lost until the "
+            "PAT is rotated. Run `python scripts/rotate_dispatch_pat.py` "
+            "with a fresh fine-grained PAT (Contents:read + Actions:write "
+            "on Eiasash/auto-audit). See `scripts/DISPATCH_PAT_ROTATION.md`.",
+            "* For `dispatch_chain_workflow_missing`: the affected watched "
+            "repo lost `.github/workflows/notify-auto-audit.yml`. Restore "
+            "it from any sibling watched repo — the file is identical "
+            "across all four.",
             "* Close this issue once the next probe (≤30 min) reports green.",
         ]
         file_issue("auto-audit", title, "\n".join(body_lines), ["auto-audit", "cross-cutting"])
