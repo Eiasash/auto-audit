@@ -1559,6 +1559,120 @@ def probe_ward_helper_pull_rpc() -> list[dict[str, Any]]:
 
 # ─────────────────────────── orchestration ────────────────────────────
 
+# ward-helper cross-device sync — client-side wiring regression guard.
+# The 2026-04-29 migration (PR #29) added the server side: ward_helper_backup.username
+# column + ward_helper_pull_by_username RPC. The 2026-04-30 v1.31.0 ship wired the
+# client side: pushBlob's username param + pullByUsername RPC wrapper + restoreFromCloud
+# auth-aware route selection. probe_ward_helper_pull_rpc above smoke-tests the server.
+# This probe smoke-tests the *client* — it greps source on main for the markers that
+# prove the wiring hasn't silently drifted (revert, refactor accident, conflict drop).
+WARD_HELPER_SYNC_WIRING_MARKERS: list[tuple[str, str, str]] = [
+    # (filename, marker-name, regex)
+    (
+        "src/storage/cloud.ts",
+        "pullByUsername-export",
+        r"export\s+async\s+function\s+pullByUsername\s*\(",
+    ),
+    (
+        "src/storage/cloud.ts",
+        "pullByUsername-rpc-call",
+        r"\.rpc\(\s*['\"]ward_helper_pull_by_username['\"]",
+    ),
+    (
+        "src/storage/cloud.ts",
+        "pushBlob-username-param",
+        r"export\s+async\s+function\s+pushBlob\([^)]*username\??\s*:\s*string",
+    ),
+    (
+        "src/notes/save.ts",
+        "pullByUsername-import",
+        r"pullByUsername",
+    ),
+    (
+        "src/notes/save.ts",
+        "getCurrentUser-import",
+        r"from\s+['\"]@/auth/auth['\"]",
+    ),
+    (
+        "src/notes/save.ts",
+        "restore-source-field",
+        r"source\s*:\s*['\"](?:username|anon)['\"]|source:\s*user\s*\?",
+    ),
+]
+
+
+def probe_ward_helper_sync_wiring() -> list[dict[str, Any]]:
+    """Verify ward-helper's client-side cross-device sync wiring stays in place.
+
+    Server side is covered by probe_ward_helper_pull_rpc above (RPC reachable,
+    GRANT EXECUTE intact, sentinel-empty round-trip). But a working RPC with
+    no client caller is invisible to the user — the cross-device flow is
+    silently broken with no error.
+
+    This probe greps the v1.31.0 wiring markers on `main`. Any missing marker
+    raises a WARNING (not CRITICAL): the failure mode is "cross-device restore
+    returns empty when it should return rows," which is silent + recoverable
+    by re-introducing the wiring, not user-data loss.
+
+    Markers are deliberately loose-but-specific: they tolerate local refactors
+    (renaming variables, extracting helpers, moving auth import to a barrel)
+    while still catching the high-impact regressions: pullByUsername removed,
+    pushBlob's username param dropped, restoreFromCloud reverted to the
+    legacy single-path version.
+
+    If this probe ever needs to handle a deliberate refactor that breaks the
+    grep pattern, update WARD_HELPER_SYNC_WIRING_MARKERS above to match the
+    new code shape — that's the documented contract.
+    """
+    issues: list[dict[str, Any]] = []
+    repo = "ward-helper"
+
+    # Cache file contents per call so we hit the API once per file, not
+    # once per marker.
+    file_cache: dict[str, Optional[str]] = {}
+    for path, _name, _pattern in WARD_HELPER_SYNC_WIRING_MARKERS:
+        if path in file_cache:
+            continue
+        status, data = gh(f"/repos/{OWNER}/{repo}/contents/{path}")
+        if status != 200 or not isinstance(data, dict) or "content" not in data:
+            file_cache[path] = None
+            continue
+        try:
+            file_cache[path] = base64.b64decode(data["content"]).decode("utf-8")
+        except Exception as e:
+            sys.stderr.write(f"[probe] ward_helper_sync_wiring decode {path}: {e}\n")
+            file_cache[path] = None
+
+    for path, name, pattern in WARD_HELPER_SYNC_WIRING_MARKERS:
+        content = file_cache.get(path)
+        if content is None:
+            issues.append({
+                "severity": "warning",
+                "kind": "ward_helper_sync_wiring_file_missing",
+                "msg": (
+                    f"{repo}:{path} not found on main — cross-device sync wiring "
+                    f"check skipped. If this file moved, update "
+                    f"WARD_HELPER_SYNC_WIRING_MARKERS in scripts/probe.py."
+                ),
+                "url": f"https://github.com/{OWNER}/{repo}/blob/main/{path}",
+            })
+            continue
+        if not re.search(pattern, content):
+            issues.append({
+                "severity": "warning",
+                "kind": "ward_helper_sync_wiring_marker_missing",
+                "msg": (
+                    f"{repo}:{path} missing wiring marker '{name}' "
+                    f"(pattern: {pattern}). Cross-device restore likely silently "
+                    f"broken — server RPC works but no client caller. Restore the "
+                    f"wiring or update the marker if this was a deliberate refactor."
+                ),
+                "url": f"https://github.com/{OWNER}/{repo}/blob/main/{path}",
+            })
+
+    return issues
+
+
 def probe_scheduler_health() -> list[dict[str, Any]]:
     """Self-check: did the previous Tier 1 cron tick happen on time?
 
@@ -1630,6 +1744,7 @@ def run() -> dict[str, Any]:
             "backup_get_rpc": [],
             "dispatch_chain": [],
             "ward_helper_pull_rpc": [],
+            "ward_helper_sync_wiring": [],
         },
     }
 
@@ -1723,6 +1838,9 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] ward_helper pull rpc smoke\n")
     report["cross_cutting"]["ward_helper_pull_rpc"] = probe_ward_helper_pull_rpc()
 
+    sys.stderr.write("[probe] ward_helper sync wiring (client-side static check)\n")
+    report["cross_cutting"]["ward_helper_sync_wiring"] = probe_ward_helper_sync_wiring()
+
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
 
@@ -1811,6 +1929,14 @@ def render_md(report: dict[str, Any]) -> str:
         worst = "🔴" if any(i.get("severity") == "critical" for i in whp) else "🟡"
         lines.append(f"## {worst} Cross-cutting: ward_helper pull-by-username RPC")
         for i in whp:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # ward_helper client-side sync wiring (static-source regression guard)
+    whw = report["cross_cutting"].get("ward_helper_sync_wiring", [])
+    if whw:
+        lines.append("## 🟡 Cross-cutting: ward_helper sync wiring (client-side)")
+        for i in whw:
             tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
             lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
         lines.append("")
