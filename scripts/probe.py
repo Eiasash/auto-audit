@@ -1452,6 +1452,178 @@ def probe_dispatch_chain_health() -> list[dict[str, Any]]:
     return issues
 
 
+# Dispatch PAT rotation thresholds. Keep in lockstep with the rotation
+# runbook (scripts/DISPATCH_PAT_ROTATION.md): the recommended PAT lifetime
+# is 90 days, so we WARN at 75 (last-2-week heads-up) and CRIT at 90+.
+DISPATCH_PAT_SECRET = "AUTO_AUDIT_DISPATCH_PAT"
+DISPATCH_PAT_WARN_DAYS = 75
+DISPATCH_PAT_CRIT_DAYS = 90
+
+
+def probe_dispatch_pat_freshness() -> list[dict[str, Any]]:
+    """Watch for AUTO_AUDIT_DISPATCH_PAT going stale.
+
+    The dispatch chain (auto-audit#14) relies on a PAT installed in each
+    watched PWA repo as the AUTO_AUDIT_DISPATCH_PAT secret. The rotation
+    runbook (scripts/DISPATCH_PAT_ROTATION.md) prescribes a 90-day cycle
+    against fine-grained PATs scoped only to Eiasash/auto-audit.
+
+    The risk this probe catches: a PAT that has expired in GitHub's eyes
+    will start failing notify-auto-audit dispatches. probe_dispatch_chain_
+    health will fire CRITICAL once the *first* failed dispatch lands — i.e.
+    after the next push-to-main on a watched repo. That's reactive. This
+    probe is the proactive counterpart: it surfaces the rotation BEFORE
+    the PAT expires by reading the secret's updated_at metadata via API.
+
+    Why state-based, not calendar-based: a calendar reminder workflow
+    would file an issue every 90 days regardless of whether you'd already
+    rotated. A state-based probe auto-clears once you rotate (because
+    updated_at moves forward), so there's no manual "close the reminder"
+    step. Less issue churn, more honest signal.
+
+    What it checks: for each watched repo,
+        GET /repos/{owner}/{repo}/actions/secrets/AUTO_AUDIT_DISPATCH_PAT
+    returns name + created_at + updated_at (NOT the secret value — that's
+    write-only, by design). We compute days_since_rotation = now -
+    updated_at and bucket:
+
+        days < WARN (75)     → silent, healthy
+        WARN ≤ days < CRIT   → warning: 14-day rotation runway
+        days ≥ CRIT (90)     → critical: rotate now or expect dispatch
+                                failures any time
+
+    HTTP failure modes (token lacks secrets:read, secret missing, network):
+    each maps to its own warning kind so the issue body explains the
+    actual cause rather than a generic "probe error". A missing secret on
+    a watched repo IS a critical (push-to-probe SLA broken on that repo)
+    even though the dispatch_chain probe will likely also catch it via
+    the next failed run.
+
+    Why cross_cutting: same reason as probe_dispatch_chain_health — the
+    fix is one rotation that touches all four repos. Grouping the
+    findings keeps the runbook coherent.
+    """
+    issues: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
+
+    for repo in DISPATCH_NOTIFY_REPOS:
+        path = f"/repos/{OWNER}/{repo}/actions/secrets/{DISPATCH_PAT_SECRET}"
+        try:
+            status, data = gh(path)
+        except Exception as e:  # pragma: no cover — network/JSON glitches
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_probe_error",
+                "msg": (
+                    f"Could not query {DISPATCH_PAT_SECRET} metadata for {repo}: {e}. "
+                    f"Probe is non-fatal — dispatch_chain_health will still catch "
+                    f"actual dispatch failures."
+                ),
+            })
+            continue
+
+        if status == 404:
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_pat_missing",
+                "msg": (
+                    f"{repo}: secret {DISPATCH_PAT_SECRET} returned 404. The "
+                    f"notify-auto-audit dispatcher cannot authenticate without "
+                    f"it — push-to-probe SLA is broken for this repo (cron "
+                    f"failsafe still runs). Restore the secret per "
+                    f"scripts/DISPATCH_PAT_ROTATION.md."
+                ),
+            })
+            continue
+
+        if status == 403:
+            # Token lacks secrets:read scope. Don't alarm on every cycle —
+            # this isn't an alarm condition, it's a config gap on the probe
+            # token itself.
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_probe_unauthorized",
+                "msg": (
+                    f"{repo}: GET secret metadata returned 403 — the GH_TOKEN "
+                    f"used by this probe lacks secrets:read on {repo}. Grant "
+                    f"the scope or accept that this probe will be silent for "
+                    f"this repo."
+                ),
+            })
+            continue
+
+        if status != 200 or not isinstance(data, dict):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_unexpected_status",
+                "msg": (
+                    f"{repo}: GET secret metadata returned HTTP {status}. "
+                    f"Probe is non-fatal."
+                ),
+            })
+            continue
+
+        updated_at_raw = data.get("updated_at")
+        if not isinstance(updated_at_raw, str):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_metadata_malformed",
+                "msg": (
+                    f"{repo}: secret metadata missing updated_at. "
+                    f"GitHub API contract change? Probe is non-fatal."
+                ),
+            })
+            continue
+
+        try:
+            # GitHub returns ISO 8601 with trailing Z; fromisoformat handles
+            # +00:00 but not Z directly on Python <3.11 — be defensive.
+            normalized = updated_at_raw.replace("Z", "+00:00")
+            updated_at = datetime.fromisoformat(normalized)
+        except ValueError:
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_metadata_unparseable",
+                "msg": (
+                    f"{repo}: could not parse updated_at='{updated_at_raw}'. "
+                    f"Probe is non-fatal."
+                ),
+            })
+            continue
+
+        days_since = (now - updated_at).days
+
+        if days_since >= DISPATCH_PAT_CRIT_DAYS:
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_pat_overdue",
+                "msg": (
+                    f"{repo}: {DISPATCH_PAT_SECRET} last rotated "
+                    f"{days_since} days ago ({updated_at_raw}), past the "
+                    f"{DISPATCH_PAT_CRIT_DAYS}-day threshold. Rotate per "
+                    f"scripts/DISPATCH_PAT_ROTATION.md before the PAT expires "
+                    f"and push-to-probe SLA breaks. The fix is one rotation "
+                    f"covering all watched repos."
+                ),
+            })
+        elif days_since >= DISPATCH_PAT_WARN_DAYS:
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_aging",
+                "msg": (
+                    f"{repo}: {DISPATCH_PAT_SECRET} last rotated "
+                    f"{days_since} days ago ({updated_at_raw}). Approaching "
+                    f"the {DISPATCH_PAT_CRIT_DAYS}-day rotation cadence — "
+                    f"plan to rotate within "
+                    f"{DISPATCH_PAT_CRIT_DAYS - days_since} days "
+                    f"per scripts/DISPATCH_PAT_ROTATION.md."
+                ),
+            })
+        # days_since < WARN → silent, healthy.
+
+    return issues
+
+
 # ward_helper_pull_by_username RPC — added 2026-04-29 alongside the
 # ward_helper_backup.username column (option 2 hybrid bridge: cross-device
 # restore via app_users login). The RPC bypasses the auth.uid()-based RLS
@@ -1887,6 +2059,9 @@ def run() -> dict[str, Any]:
 
     sys.stderr.write("[probe] dispatch chain health\n")
     report["cross_cutting"]["dispatch_chain"] = probe_dispatch_chain_health()
+
+    sys.stderr.write("[probe] dispatch PAT freshness\n")
+    report["cross_cutting"]["dispatch_pat_freshness"] = probe_dispatch_pat_freshness()
 
     sys.stderr.write("[probe] ward_helper pull rpc smoke\n")
     report["cross_cutting"]["ward_helper_pull_rpc"] = probe_ward_helper_pull_rpc()
