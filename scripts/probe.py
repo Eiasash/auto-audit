@@ -1492,12 +1492,22 @@ def probe_dispatch_pat_freshness() -> list[dict[str, Any]]:
         days ≥ CRIT (90)     → critical: rotate now or expect dispatch
                                 failures any time
 
-    HTTP failure modes (token lacks secrets:read, secret missing, network):
-    each maps to its own warning kind so the issue body explains the
-    actual cause rather than a generic "probe error". A missing secret on
-    a watched repo IS a critical (push-to-probe SLA broken on that repo)
-    even though the dispatch_chain probe will likely also catch it via
-    the next failed run.
+    Scope requirement (opt-in): this probe needs the GH_TOKEN (i.e.
+    MONITOR_PAT) to have `Secrets: Read` on the four watched repos, in
+    addition to Contents/Issues/PullRequests/Actions. A fine-grained PAT
+    without that permission gets HTTP 403 on every read. The default
+    posture is OPT-IN-SILENT: if all four repos return 403, the probe
+    emits zero findings (config gap is not a per-repo alarm condition;
+    user can read the runbook or this docstring to learn how to enable
+    it). The dispatch_chain probe still catches actual dispatch failures,
+    so missing this proactive signal degrades to "react to first failure"
+    rather than "no signal at all".
+
+    HTTP failure modes (other than 403) get distinct kinds:
+      404           → critical: secret missing on this repo (push-to-probe broken)
+      4xx/5xx other → warning: probe is non-fatal, dispatch_chain catches actual failures
+      malformed/    → warning: GitHub API contract change?
+      unparseable
 
     Why cross_cutting: same reason as probe_dispatch_chain_health — the
     fix is one rotation that touches all four repos. Grouping the
@@ -1505,6 +1515,7 @@ def probe_dispatch_pat_freshness() -> list[dict[str, Any]]:
     """
     issues: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc)
+    unauthorized_count = 0
 
     for repo in DISPATCH_NOTIFY_REPOS:
         path = f"/repos/{OWNER}/{repo}/actions/secrets/{DISPATCH_PAT_SECRET}"
@@ -1537,19 +1548,14 @@ def probe_dispatch_pat_freshness() -> list[dict[str, Any]]:
             continue
 
         if status == 403:
-            # Token lacks secrets:read scope. Don't alarm on every cycle —
-            # this isn't an alarm condition, it's a config gap on the probe
-            # token itself.
-            issues.append({
-                "severity": "warning",
-                "kind": "dispatch_pat_probe_unauthorized",
-                "msg": (
-                    f"{repo}: GET secret metadata returned 403 — the GH_TOKEN "
-                    f"used by this probe lacks secrets:read on {repo}. Grant "
-                    f"the scope or accept that this probe will be silent for "
-                    f"this repo."
-                ),
-            })
+            # Token lacks secrets:read scope on this repo. Counted but not
+            # emitted per-repo: a missing scope is one config gap, not four
+            # per-repo alarms. If ALL watched repos hit 403 we treat the
+            # probe as opt-out (silent). If some return data and others
+            # 403, that's genuinely weird (asymmetric scope) and we DO
+            # emit a per-repo warning to surface the inconsistency — see
+            # mixed-scope handling after the loop.
+            unauthorized_count += 1
             continue
 
         if status != 200 or not isinstance(data, dict):
@@ -1620,6 +1626,24 @@ def probe_dispatch_pat_freshness() -> list[dict[str, Any]]:
                 ),
             })
         # days_since < WARN → silent, healthy.
+
+    # Mixed-scope detection: some repos returned 403, others returned data.
+    # That's genuinely weird (per-repo permission drift on the monitoring
+    # PAT) and we want it surfaced. If ALL repos hit 403, the probe is
+    # opt-out-silent — see docstring.
+    if 0 < unauthorized_count < len(DISPATCH_NOTIFY_REPOS):
+        issues.append({
+            "severity": "warning",
+            "kind": "dispatch_pat_probe_partial_unauthorized",
+            "msg": (
+                f"{unauthorized_count} of {len(DISPATCH_NOTIFY_REPOS)} watched "
+                f"repos returned 403 on secret metadata read — the GH_TOKEN "
+                f"used by this probe has inconsistent secrets:read scope "
+                f"across the watched set. Either grant the scope on all "
+                f"four repos (recommended — enables proactive PAT-rotation "
+                f"tracking) or revoke it on all four (silent opt-out)."
+            ),
+        })
 
     return issues
 
