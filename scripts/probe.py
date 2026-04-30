@@ -129,9 +129,21 @@ USER_AGENT = "Eiasash-auto-audit/1.0"
 # A template is only auto-dispatched if it's in this allowlist. Anything else
 # stays as a labeled issue waiting for manual workflow_dispatch — the safe
 # default for new fix templates that haven't earned trust yet.
+#
+# version_trinity earned its spot after the 2026-04-30 incident (Geri shipped
+# a v10.62.1 bump where shlav-a-mega.html lagged package.json by one patch +
+# turned CI red on main; resolved manually within ~1 min by a human follow-up
+# commit). The auto-fix.yml `version_trinity` template is deterministic
+# (no Claude calls), short (~3 min), and the workflow already short-circuits
+# cleanly when the trinity has self-resolved between probe-fire and dispatch
+# (see auto-fix.yml: "No changes — version_trinity was already in sync").
 AUTO_DISPATCH_TEMPLATES: dict[str, tuple[str, str]] = {
     "regenerate_misaligned_distractors": (
         "regenerate-misaligned-distractors.yml",
+        "main",
+    ),
+    "version_trinity": (
+        "auto-fix.yml",
         "main",
     ),
 }
@@ -278,6 +290,47 @@ def dispatch_auto_audit_workflow(
         body={"ref": ref, "inputs": inputs},
     )
     return sc in (204, 200)
+
+
+def _dispatch_inputs(template: str, repo: str, issue_num: int) -> dict[str, str]:
+    """Build the workflow_dispatch inputs dict for `template`.
+
+    Each template's workflow file declares its own inputs schema, and GitHub
+    rejects dispatches with undeclared inputs. version_trinity routes through
+    the multi-input auto-fix.yml dispatcher; older single-input templates
+    (regenerate_misaligned_distractors) just need issue_number.
+    """
+    if template == "version_trinity":
+        # auto-fix.yml requires target_repo + issue_number + fix_kind.
+        # target_repo is the watched repo whose trinity slipped, NOT auto-audit.
+        return {
+            "target_repo": repo,
+            "issue_number": str(issue_num),
+            "fix_kind": "version_trinity",
+        }
+    # Default: single input, used by single-purpose workflows that hard-code
+    # their own target (e.g. regenerate-misaligned-distractors.yml is Geri-only).
+    return {"issue_number": str(issue_num)}
+
+
+def _already_auto_dispatched(repo: str, issue_num: int, template: str) -> bool:
+    """Return True if this issue already has an auto-dispatch comment for `template`.
+
+    Closes the dedup gap that auto_audit_workflow_running misses: when the
+    previously-dispatched run has already COMPLETED but the resulting PR
+    sits open + unmerged, the next 30-min cron tick would otherwise see the
+    same critical (trinity still mismatched until the PR lands) and fire a
+    duplicate dispatch → duplicate PR. Scanning for the marker comment is
+    cheaper than an extra GH API list-PRs call and survives across runs of
+    the dispatcher itself.
+
+    Marker matches the body posted at the dispatch site below.
+    """
+    sc, data = gh(f"/repos/{OWNER}/{repo}/issues/{issue_num}/comments?per_page=50")
+    if sc != 200 or not isinstance(data, list):
+        return False
+    marker = f"🤖 Auto-dispatched `{template}`"
+    return any(marker in (c.get("body") or "") for c in data)
 
 
 # ─────────────────────────── probes ────────────────────────────
@@ -2087,13 +2140,26 @@ def main() -> int:
             # Only templates listed in AUTO_DISPATCH_TEMPLATES are eligible —
             # anything else stays manual until it's earned trust.
             # One dispatch per probe cycle per repo (the workflow itself is
-            # idempotent re: duplicate runs via auto_audit_workflow_running).
+            # idempotent re: duplicate runs via auto_audit_workflow_running),
+            # AND we additionally guard against duplicate-PR-spam across
+            # cycles via _already_auto_dispatched.
             if issue_num is not None and not AUTO_DISPATCH_DISABLED:
                 for crit in crits:
                     template = crit.get("auto_fix")
                     if template not in AUTO_DISPATCH_TEMPLATES:
                         continue
                     wf_file, wf_ref = AUTO_DISPATCH_TEMPLATES[template]
+                    # Cross-cycle dedup: if a previous probe run already fired
+                    # for this same issue, the previous PR is still on its way
+                    # (or sitting open). Don't pile on.
+                    if _already_auto_dispatched(repo, issue_num, template):
+                        sys.stderr.write(
+                            f"[auto-dispatch] already-dispatched marker found "
+                            f"on {repo}#{issue_num} for {template}; "
+                            f"skipping silently\n"
+                        )
+                        dispatched.append((repo, template, issue_num, False))
+                        break
                     if auto_audit_workflow_running(wf_file):
                         sys.stderr.write(
                             f"[auto-dispatch] {wf_file} already running; "
@@ -2118,7 +2184,7 @@ def main() -> int:
                         break
                     ok = dispatch_auto_audit_workflow(
                         wf_file,
-                        inputs={"issue_number": str(issue_num)},
+                        inputs=_dispatch_inputs(template, repo, issue_num),
                         ref=wf_ref,
                     )
                     sys.stderr.write(
