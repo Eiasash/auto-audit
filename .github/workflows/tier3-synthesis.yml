@@ -1,0 +1,117 @@
+name: Tier 3 — Weekly synthesis
+
+# Weekly cross-repo synthesis. Runs every Sunday 06:00 UTC (= 09:00 IDT) and
+# opens / comments on a GitHub issue tagged 'tier3-synthesis'. Manually
+# triggerable for testing or off-cycle pulses.
+
+on:
+  schedule:
+    # Sunday 06:00 UTC = 09:00 Israel time. Lands in Eias's morning notif feed
+    # at the start of the work week.
+    - cron: '0 6 * * 0'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Lookback window in days (default 7)'
+        type: string
+        default: '7'
+      dry_run:
+        description: 'Skip issue creation; just write report and print'
+        type: boolean
+        default: false
+      no_narrative:
+        description: 'Skip Claude narrative even if ANTHROPIC_API_KEY set'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # to commit health-reports/synthesis-*.md
+  issues:  write    # to open / comment the synthesis issue
+
+concurrency:
+  group: tier3-synthesis
+  cancel-in-progress: false
+
+jobs:
+  synthesize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history of health-reports/ for the lookback window;
+          # default depth-1 would only have the latest report committed.
+          # health-reports/ is committed as files, so depth-1 is actually
+          # sufficient — files are present on the working tree regardless
+          # of git history depth. Keep default.
+          fetch-depth: 1
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run synthesis
+        id: synth
+        env:
+          MONITOR_PAT: ${{ secrets.MONITOR_PAT }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set +e
+          DAYS="${{ inputs.days || '7' }}"
+          ARGS="--days $DAYS"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          if [ "${{ inputs.no_narrative }}" = "true" ]; then
+            ARGS="$ARGS --no-narrative"
+          fi
+          echo "Running: python3 scripts/tier3_synthesis.py $ARGS"
+          python3 scripts/tier3_synthesis.py $ARGS
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Commit synthesis report
+        # Commit the synthesis-YYYY-MM-DD.md as part of the health-reports
+        # audit trail. Race-safe loop mirrors health-check.yml.
+        if: always()
+        run: |
+          set +e
+          git config user.email "auto-audit-bot@users.noreply.github.com"
+          git config user.name  "auto-audit-bot"
+          git add health-reports/synthesis-*.md 2>/dev/null
+          if git diff --cached --quiet; then
+            echo "No new synthesis report to commit"
+            exit 0
+          fi
+          git commit -m "tier3: synthesis report $(date -u +%Y-%m-%d)"
+          for i in 1 2 3; do
+            git pull --rebase origin main
+            if git push origin main; then
+              echo "Pushed on attempt $i"
+              exit 0
+            fi
+            echo "Push attempt $i failed, retrying after 5s…"
+            sleep 5
+          done
+          echo "::warning::Could not push synthesis after 3 retries"
+          exit 0
+
+      - name: Surface synthesis as job summary
+        if: always()
+        run: |
+          {
+            echo "## Tier 3 synthesis"
+            echo ""
+            LATEST=$(ls -t health-reports/synthesis-*.md 2>/dev/null | head -1)
+            if [ -n "$LATEST" ]; then
+              cat "$LATEST"
+            else
+              echo "(no synthesis written)"
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail run on synthesis error
+        if: steps.synth.outputs.exit_code != '0'
+        run: |
+          echo "::error::Tier 3 synthesis exited non-zero"
+          exit 1
