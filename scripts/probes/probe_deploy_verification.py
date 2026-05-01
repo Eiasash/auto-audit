@@ -28,6 +28,20 @@ Two checks, one module:
    NO `auto-fix-eligible` — fabrication is not mechanically reversible;
    needs a human re-extract from source PDF.
 
+   **SCOPE CAVEAT (Phase 1):** This check covers ONLY the
+   canonical-mirrored slice of the deployed Pnimit corpus
+   (~947 questions across 7 exam-session JSON files). The remaining
+   ~609 questions in the deployed bundle are AI-generated and
+   Harrison-derived (identified by `t: 'Harrison'` or similar
+   non-session source markers) — they are NOT covered by this probe
+   and could theoretically harbor a v9.81-style fabrication that
+   this probe would not catch. Sampling is uniform across the full
+   deployed corpus, so non-canonical questions WILL surface as
+   "no canonical match" findings; they need human triage to
+   distinguish "legitimately non-canonical" from "actually fabricated."
+   Tracked for Phase 2 expansion: see auto-audit issue
+   "probe_deploy_verification: extend coverage to non-canonical slice".
+
 Drop into: scripts/probes/probe_deploy_verification.py
 
 Wire into probe.py orchestration (after the distractor-alignment block):
