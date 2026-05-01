@@ -12,6 +12,14 @@ on:
         description: 'If true, skip issue creation (just write report)'
         type: boolean
         default: false
+  repository_dispatch:
+    # Fired by watched-repo post-merge workflows so deploy verification
+    # runs immediately after a deploy lands, not waiting for the next
+    # 30-min cron tick. Phase 1: probe_deploy_verification runs in the
+    # same job; payload is informational only (probe sweeps all 5
+    # watched repos regardless of which one fired the dispatch).
+    # See probes/probe_deploy_verification.py.
+    types: [watched-repo-merge]
 
 permissions:
   contents: write   # to commit health-reports/
