@@ -1,0 +1,47 @@
+# actionlint — guard against broken workflow files at PR time.
+#
+# Why this exists: 2026-05-01, PR #25 (probe_deploy_verification Phase 1)
+# introduced a duplicate `repository_dispatch:` key in health-check.yml. YAML
+# allows it, GitHub Actions rejects it at parse time, and ALL trigger types
+# (schedule, repository_dispatch, workflow_dispatch) silently died. Net effect:
+# 10-hour monitoring blackout (11:31–21:40 UTC). See commit 7cd58d4 for the
+# postmortem and the explicit "worth a follow-up" note that this hook satisfies.
+#
+# actionlint catches:
+#   - duplicate trigger keys (the bug above)
+#   - invalid `if:` expressions
+#   - missing/wrong `runs-on`
+#   - deprecated action versions
+#   - shellcheck on `run:` blocks
+#   - and more — see https://github.com/rhysd/actionlint
+
+name: actionlint
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Lint .github/workflows/*.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        id: install
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          echo "actionlint=$(pwd)/actionlint" >> "$GITHUB_OUTPUT"
+
+      - name: Run actionlint
+        run: ${{ steps.install.outputs.actionlint }} -color
