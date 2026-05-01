@@ -37,6 +37,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 from probes.probe_distractor_alignment import check_distractor_alignment
+from probes.probe_deploy_verification import (
+    DEPLOY_CONFIG,
+    check_pnimit_canonical_sample,
+    check_version_literal,
+)
 
 # ─────────────────────────── config ────────────────────────────
 
@@ -2063,6 +2068,49 @@ def run() -> dict[str, Any]:
                     repo_report["issues"].append(issue)
             except Exception as e:
                 sys.stderr.write(f"[probe] distractor_alignment failed: {e}\n")
+
+        # Deploy verification probe (Phase 1 — all 5 watched PWA repos with
+        # verify-deploy.sh). Replicates the per-repo verify-deploy.sh logic
+        # from the auto-audit side; catches Pages publish failures, CDN
+        # staleness, and tree-shake-dropped version literals that
+        # probe_live_sw / probe_deploy_drift miss.
+        if repo in DEPLOY_CONFIG:
+            try:
+                for f in check_version_literal(repo):
+                    sev_map = {"CRITICAL": "critical", "WARN": "warning", "ERROR": "error"}
+                    issue = {
+                        "severity": sev_map.get(f["severity"], "warning"),
+                        "kind": f.get("template") or "deploy-verification",
+                        "msg": f["title"],
+                    }
+                    if f.get("template"):
+                        issue["auto_fix"] = f["template"]
+                    issue["body"] = f["body"]
+                    issue["labels"] = f["labels"]
+                    issue["url"] = f"https://github.com/{OWNER}/{repo}"
+                    repo_report["issues"].append(issue)
+            except Exception as e:
+                sys.stderr.write(f"[probe] deploy_verification ({repo}) failed: {e}\n")
+
+        # Pnimit-specific: canonical question-content sampling. NEW
+        # capability this phase. Detects fabricated stems in the deployed
+        # bundle that don't match any session file under
+        # scripts/exam_audit/canonical/. NOT auto-fixable by design.
+        if repo == "InternalMedicine":
+            try:
+                for f in check_pnimit_canonical_sample():
+                    sev_map = {"CRITICAL": "critical", "WARN": "warning", "ERROR": "error"}
+                    issue = {
+                        "severity": sev_map.get(f["severity"], "warning"),
+                        "kind": "canonical-fabrication",
+                        "msg": f["title"],
+                        "body": f["body"],
+                        "labels": f["labels"],
+                        "url": f"https://github.com/{OWNER}/{repo}/tree/main/scripts/exam_audit/canonical",
+                    }
+                    repo_report["issues"].append(issue)
+            except Exception as e:
+                sys.stderr.write(f"[probe] pnimit_canonical_sample failed: {e}\n")
 
         report["repos"][repo] = repo_report
 
