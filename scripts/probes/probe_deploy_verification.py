@@ -28,19 +28,17 @@ Two checks, one module:
    NO `auto-fix-eligible` — fabrication is not mechanically reversible;
    needs a human re-extract from source PDF.
 
-   **SCOPE CAVEAT (Phase 1):** This check covers ONLY the
-   canonical-mirrored slice of the deployed Pnimit corpus
-   (~947 questions across 7 exam-session JSON files). The remaining
-   ~609 questions in the deployed bundle are AI-generated and
-   Harrison-derived (identified by `t: 'Harrison'` or similar
-   non-session source markers) — they are NOT covered by this probe
-   and could theoretically harbor a v9.81-style fabrication that
-   this probe would not catch. Sampling is uniform across the full
-   deployed corpus, so non-canonical questions WILL surface as
-   "no canonical match" findings; they need human triage to
-   distinguish "legitimately non-canonical" from "actually fabricated."
-   Tracked for Phase 2 expansion: see auto-audit issue
-   "probe_deploy_verification: extend coverage to non-canonical slice".
+   **Phase 2 (tag-routed sampling):** Sampling pre-filters to
+   `t in CANONICAL_SESSION_TAGS` — the exam-session tags whose
+   questions are canonical-grounded under `scripts/exam_audit/canonical/`.
+   `t: 'Harrison'` (~589 q) and `t: 'Exam'` (~20 q) are skipped:
+   they're deliberately not canonical-mirrored, and Phase 1's uniform
+   sampling produced false positives on every non-canonical draw.
+   New `t` values surface as a WARN finding so the maintainer can
+   decide handling (add to CANONICAL_SESSION_TAGS + create canonical
+   file, or add to NON_CANONICAL_TAGS to skip).
+   Future Phase 3: per-tag verification via an optional `source`
+   field (Harrison chapter/page, AI model+date) — not yet wired.
 
 Drop into: scripts/probes/probe_deploy_verification.py
 
@@ -130,6 +128,29 @@ DEPLOY_CONFIG: Dict[str, Dict[str, Any]] = {
 CANONICAL_DIR = "scripts/exam_audit/canonical"
 DEPLOYED_QUESTIONS_URL = "https://eiasash.github.io/InternalMedicine/data/questions.json"
 PNIMIT_REPO = "Eiasash/InternalMedicine"
+
+# Phase 2 tag routing: only questions whose `t` field is one of these tags
+# are canonical-grounded under scripts/exam_audit/canonical/. The sampler
+# pre-filters to these before doing the canonical-match assertion.
+#
+# Maintenance: when a new exam session ships, add its tag here AND create
+# the matching canonical file under InternalMedicine/scripts/exam_audit/
+# canonical/. The probe's "unknown tag" WARN finding nudges the maintainer
+# if a tag appears in the deployed bundle but isn't declared here.
+#
+# Sourced from the 2026-05-01 deployed Pnimit corpus tally (1556 q).
+CANONICAL_SESSION_TAGS: frozenset = frozenset({
+    "2020", "2021-Jun", "2022-Jun", "2023-Jun",
+    "2024-May", "2024-Oct", "2025-Jun",
+})
+
+# Tags whose questions are deliberately NOT canonical-grounded — Harrison-
+# derived, AI-generated, or imported from other non-IMA sources. Phase 2
+# skips these in canonical sampling. Phase 3 (not yet implemented) will
+# verify them per-tag via an optional `source` field on each question.
+NON_CANONICAL_TAGS: frozenset = frozenset({
+    "Harrison", "Exam",
+})
 
 
 # ─────────────────────────── helpers ───────────────────────────
@@ -381,26 +402,90 @@ def check_pnimit_canonical_sample(
             "template_args": {},
         }]
 
-    # Sample by index with replacement-free choice
-    n = min(sample_size, len(deployed))
-    indices = rng.sample(range(len(deployed)), n)
+    # Phase 2 tag routing: pre-filter to canonical-eligible indices and
+    # surface any unrecognized tags as a separate WARN finding so they
+    # don't accumulate silently when a new exam session lands.
+    known_tags = CANONICAL_SESSION_TAGS | NON_CANONICAL_TAGS
+    all_tags_seen: set = set()
+    eligible: List[int] = []
+    for i, q in enumerate(deployed):
+        if not isinstance(q, dict):
+            continue
+        t = q.get("t")
+        if t is not None:
+            all_tags_seen.add(t)
+        if t in CANONICAL_SESSION_TAGS:
+            eligible.append(i)
+
+    findings: List[Dict[str, Any]] = []
+
+    unknown_tags = all_tags_seen - known_tags
+    if unknown_tags:
+        findings.append({
+            "severity": "WARN",
+            "repo": "InternalMedicine",
+            "title": (
+                f"Pnimit deployed bundle has unrecognized `t` value(s): "
+                f"{sorted(unknown_tags)}"
+            ),
+            "body": (
+                f"`data/questions.json` on the live deploy contains "
+                f"{len(unknown_tags)} `t` value(s) not declared in this probe's "
+                f"`CANONICAL_SESSION_TAGS` or `NON_CANONICAL_TAGS`: "
+                f"{sorted(unknown_tags)}.\n\n"
+                f"Decide handling before this accumulates silently:\n"
+                f"- New exam session → add tag to `CANONICAL_SESSION_TAGS` AND "
+                f"create the matching canonical file under `{CANONICAL_DIR}/`.\n"
+                f"- New non-canonical source (textbook, AI model, etc.) → add "
+                f"to `NON_CANONICAL_TAGS` so the sampler skips it correctly.\n\n"
+                f"Sample-eligible this run: {len(eligible)}/{len(deployed)} "
+                f"questions. Unknown-tag questions are excluded from sampling."
+            ),
+            "labels": ["auto-audit"],
+            "template": None,
+            "template_args": {},
+        })
+
+    if not eligible:
+        findings.append({
+            "severity": "WARN",
+            "repo": "InternalMedicine",
+            "title": (
+                "Pnimit canonical sampling: no canonical-eligible questions "
+                "in deployed corpus"
+            ),
+            "body": (
+                f"Of {len(deployed)} deployed questions, none have `t` in "
+                f"`CANONICAL_SESSION_TAGS` ({sorted(CANONICAL_SESSION_TAGS)}). "
+                f"The probe cannot canonical-match anything — either every "
+                f"canonical-tagged exam was retired, or the deployed corpus "
+                f"shape changed, or all sessions were re-tagged."
+            ),
+            "labels": ["auto-audit"],
+            "template": None,
+            "template_args": {},
+        })
+        return findings
+
+    # Sample N canonical-eligible indices without replacement
+    n = min(sample_size, len(eligible))
+    indices = rng.sample(eligible, n)
     mismatches: List[Dict[str, Any]] = []
     for idx in indices:
         q = deployed[idx]
-        if not isinstance(q, dict):
-            continue
         stem = q.get("q")
         if not isinstance(stem, str):
             continue
         if stem.strip() not in canonical_stems:
             mismatches.append({
                 "idx": idx,
+                "t": q.get("t"),
                 "deployed_q": stem[:240],
                 "stem_len": len(stem),
             })
 
     if not mismatches:
-        return []
+        return findings  # may contain the unknown-tags WARN above
 
     body_lines = [
         f"**{len(mismatches)} of {n} sampled questions have stems that do NOT appear "
@@ -426,7 +511,7 @@ def check_pnimit_canonical_sample(
         "```",
     ]
 
-    return [{
+    findings.append({
         "severity": "CRITICAL",
         "repo": "InternalMedicine",
         "title": (
@@ -438,7 +523,8 @@ def check_pnimit_canonical_sample(
         "labels": ["auto-audit", "content-fabrication"],
         "template": None,
         "template_args": {},
-    }]
+    })
+    return findings
 
 
 # ─────────────────────────── CLI ───────────────────────────
