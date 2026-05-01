@@ -12,8 +12,16 @@
 #   - invalid `if:` expressions
 #   - missing/wrong `runs-on`
 #   - deprecated action versions
-#   - shellcheck on `run:` blocks
+#   - shellcheck on `run:` blocks (severity warning+ only — see below)
 #   - and more — see https://github.com/rhysd/actionlint
+#
+# Shellcheck severity is filtered to `warning` and above. The default
+# (`info` and `style` included) flags lots of stylistic noise inside
+# heredoc'd workflow scripts — SC2086 word-splitting, SC2001 sed-vs-replace,
+# SC2012 ls-vs-find — none of which would have caught the duplicate-key
+# bug. We keep real-bug shellcheck (warning/error) and drop the noise
+# so this hook stays useful instead of becoming a CI-blocker for stylistic
+# drift. To disable shellcheck entirely, change to: -shellcheck=""
 
 name: actionlint
 
@@ -44,4 +52,4 @@ jobs:
           echo "actionlint=$(pwd)/actionlint" >> "$GITHUB_OUTPUT"
 
       - name: Run actionlint
-        run: ${{ steps.install.outputs.actionlint }} -color
+        run: ${{ steps.install.outputs.actionlint }} -color -shellcheck="shellcheck -S warning"
