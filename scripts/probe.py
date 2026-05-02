@@ -2039,6 +2039,11 @@ def probe_feedback_queue() -> list[dict[str, Any]]:
             if verdict not in ("trivial", "needs_review"):
                 verdict = "needs_review"
 
+            # Track delivery path so probe-rescued rows are distinguishable
+            # from webhook-delivered rows in post-hoc debugging queries.
+            is_fallback = row.get("status") == "new"  # webhook never ran
+            assessment = {**assessment, "delivery": "probe-fallback" if is_fallback else "webhook"}
+
             is_trivial = verdict == "trivial"
             labels = ["feedback", "auto-audit"] + (["auto-fix-eligible"] if is_trivial else [])
             final_status = "auto_fix_dispatched" if is_trivial else "escalated"
@@ -2066,6 +2071,7 @@ def probe_feedback_queue() -> list[dict[str, Any]]:
                 f"- **Context**: `{q_ctx_short}`",
                 f"- **App version**: {row.get('app_version', '?')}",
                 f"- **Submitted**: {row.get('created_at', '?')}",
+                f"- **Delivery**: {'⚠️ probe-fallback (webhook missed)' if is_fallback else '✅ webhook'}",
                 "",
                 "## Classification",
                 "",
