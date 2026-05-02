@@ -1927,6 +1927,194 @@ def probe_ward_helper_sync_wiring() -> list[dict[str, Any]]:
     return issues
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feedback queue triage (probe_feedback_queue)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FEEDBACK_TABLES: dict[str, tuple[str, str]] = {
+    "shlav_feedback":     ("geri",      "Geriatrics"),
+    "mishpacha_feedback": ("mishpacha", "FamilyMedicine"),
+    "pnimit_feedback":    ("pnimit",    "InternalMedicine"),
+}
+
+
+def _supabase_get(path: str) -> tuple[int, Any]:
+    """GET against the shared Supabase REST API with the anon key."""
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + path
+    try:
+        return _http_json(
+            url,
+            headers={
+                "apikey": STUDY_PLAN_SUPABASE_KEY,
+                "Authorization": f"Bearer {STUDY_PLAN_SUPABASE_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
+    except Exception as e:
+        return 0, str(e)
+
+
+def _supabase_rpc(name: str, body: dict) -> int:
+    """POST to a Supabase RPC.  Returns HTTP status code."""
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + f"/rest/v1/rpc/{name}"
+    encoded = json.dumps(body).encode()
+    try:
+        sc, _ = _http_json(
+            url,
+            headers={
+                "apikey": STUDY_PLAN_SUPABASE_KEY,
+                "Authorization": f"Bearer {STUDY_PLAN_SUPABASE_KEY}",
+                "Content-Type": "application/json",
+            },
+            body=encoded,
+            method="POST",
+        )
+        return sc
+    except Exception:
+        return 0
+
+
+def probe_feedback_queue() -> list[dict[str, Any]]:
+    """
+    Scans all three *_feedback tables for unprocessed rows and creates
+    GitHub issues in the relevant PWA repo.
+
+    Statuses picked up:
+      pending_trivial  — classified by Netlify webhook as auto-fixable
+      pending_review   — classified as needing human review
+      new (>15 min)    — webhook missed; fallback
+
+    For trivial rows  → labels: feedback + auto-audit + auto-fix-eligible
+                        status updated to: auto_fix_dispatched
+    For review rows   → labels: feedback + auto-audit
+                        status updated to: escalated
+
+    Findings are WARN (informational) so the health dashboard shows the queue.
+    Issue creation is idempotent via file_issue's title-dedupe logic.
+    """
+    findings: list[dict[str, Any]] = []
+
+    cutoff = (datetime.utcnow() - __import__("datetime").timedelta(minutes=15)).strftime(
+        "%Y-%m-%dT%H:%M:%S+00:00"
+    )
+
+    for table, (app_key, repo) in _FEEDBACK_TABLES.items():
+        # Rows classified by Netlify webhook
+        sc1, pending = _supabase_get(
+            f"/rest/v1/{table}"
+            f"?status=in.(pending_trivial,pending_review)"
+            f"&select=id,type,message,context,app_version,assessment,created_at,status"
+            f"&order=id.asc"
+        )
+        if sc1 != 200:
+            findings.append({
+                "severity": "warning",
+                "kind": "feedback_queue_fetch_error",
+                "msg": f"feedback_queue: failed to query {table} (HTTP {sc1})",
+            })
+            pending = []
+
+        # Stale 'new' rows that the webhook never processed
+        sc2, stale = _supabase_get(
+            f"/rest/v1/{table}"
+            f"?status=eq.new"
+            f"&created_at=lt.{urllib.request.quote(cutoff)}"
+            f"&select=id,type,message,context,app_version,assessment,created_at,status"
+            f"&order=id.asc"
+        )
+        rows: list[dict] = (pending if isinstance(pending, list) else []) + (
+            stale if sc2 == 200 and isinstance(stale, list) else []
+        )
+
+        for row in rows:
+            row_id = row.get("id")
+            if row_id is None:
+                continue
+
+            assessment: dict = row.get("assessment") or {}
+            if not isinstance(assessment, dict):
+                assessment = {}
+            verdict = assessment.get("verdict", "needs_review")
+            if verdict not in ("trivial", "needs_review"):
+                verdict = "needs_review"
+
+            is_trivial = verdict == "trivial"
+            labels = ["feedback", "auto-audit"] + (["auto-fix-eligible"] if is_trivial else [])
+            final_status = "auto_fix_dispatched" if is_trivial else "escalated"
+            severity_tag = "trivial" if is_trivial else "needs-review"
+
+            q_ctx = str(row.get("context", ""))
+            q_ctx_short = q_ctx[:140] + ("…" if len(q_ctx) > 140 else "")
+            reason = assessment.get("reason", "Webhook missed — no automated classification")
+            suggested_fix = assessment.get("suggested_fix", "")
+
+            title = (
+                f"[feedback/{app_key}] #{row_id} — "
+                f"{row.get('type', '?')} ({severity_tag})"
+            )
+            body_lines = [
+                f"_Auto-generated by `Eiasash/auto-audit` `probe_feedback_queue` "
+                f"at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}._",
+                "",
+                "## Submission",
+                "",
+                f"- **App**: `{app_key}`",
+                f"- **Row ID**: {row_id}",
+                f"- **Type**: `{row.get('type', '?')}`",
+                f"- **User message**: `{row.get('message', '')}`",
+                f"- **Context**: `{q_ctx_short}`",
+                f"- **App version**: {row.get('app_version', '?')}",
+                f"- **Submitted**: {row.get('created_at', '?')}",
+                "",
+                "## Classification",
+                "",
+                f"- **Verdict**: `{verdict}`",
+                f"- **Reason**: {reason}",
+            ]
+            if suggested_fix:
+                body_lines += [f"- **Suggested fix**: {suggested_fix}"]
+            body_lines += [""]
+            if is_trivial:
+                body_lines.append(
+                    "> ⚙️ Labeled `auto-fix-eligible` — "
+                    "Tier 2 `investigate` template will attempt an automated fix."
+                )
+            else:
+                body_lines.append(
+                    "> 👤 Requires human review by @Eiasash — "
+                    "clinical dispute or ambiguous question."
+                )
+
+            issue_num: Optional[int] = None
+            if not DRY_RUN:
+                issue_num = file_issue(repo, title, "\n".join(body_lines), labels)
+                sc_rpc = _supabase_rpc(
+                    "feedback_set_status",
+                    {"p_app": app_key, "p_id": row_id, "p_status": final_status,
+                     "p_gh_issue": issue_num},
+                )
+                if sc_rpc not in (200, 204):
+                    sys.stderr.write(
+                        f"[feedback-queue] failed to update {table}#{row_id}: HTTP {sc_rpc}\n"
+                    )
+
+            findings.append({
+                "severity": "warning",
+                "kind": "feedback_queue_item",
+                "msg": (
+                    f"feedback/{app_key}#{row_id} ({row.get('type','?')}) → "
+                    f"{verdict}. "
+                    + (f"{repo}#{issue_num}" if issue_num else "DRY_RUN")
+                ),
+                "row_id": row_id,
+                "verdict": verdict,
+                "issue_num": issue_num,
+                "repo": repo,
+            })
+
+    return findings
+
 def probe_scheduler_health() -> list[dict[str, Any]]:
     """Self-check: did the previous Tier 1 cron tick happen on time?
 
@@ -2143,6 +2331,8 @@ def run() -> dict[str, Any]:
 
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
+
+    report["cross_cutting"]["feedback_queue"] = probe_feedback_queue()
 
     return report
 
