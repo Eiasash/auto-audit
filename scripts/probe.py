@@ -37,6 +37,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 from probes.probe_distractor_alignment import check_distractor_alignment
+from probes.probe_deploy_verification import (
+    DEPLOY_CONFIG,
+    check_pnimit_canonical_sample,
+    check_version_literal,
+)
 
 # ─────────────────────────── config ────────────────────────────
 
@@ -129,9 +134,21 @@ USER_AGENT = "Eiasash-auto-audit/1.0"
 # A template is only auto-dispatched if it's in this allowlist. Anything else
 # stays as a labeled issue waiting for manual workflow_dispatch — the safe
 # default for new fix templates that haven't earned trust yet.
+#
+# version_trinity earned its spot after the 2026-04-30 incident (Geri shipped
+# a v10.62.1 bump where shlav-a-mega.html lagged package.json by one patch +
+# turned CI red on main; resolved manually within ~1 min by a human follow-up
+# commit). The auto-fix.yml `version_trinity` template is deterministic
+# (no Claude calls), short (~3 min), and the workflow already short-circuits
+# cleanly when the trinity has self-resolved between probe-fire and dispatch
+# (see auto-fix.yml: "No changes — version_trinity was already in sync").
 AUTO_DISPATCH_TEMPLATES: dict[str, tuple[str, str]] = {
     "regenerate_misaligned_distractors": (
         "regenerate-misaligned-distractors.yml",
+        "main",
+    ),
+    "version_trinity": (
+        "auto-fix.yml",
         "main",
     ),
 }
@@ -278,6 +295,47 @@ def dispatch_auto_audit_workflow(
         body={"ref": ref, "inputs": inputs},
     )
     return sc in (204, 200)
+
+
+def _dispatch_inputs(template: str, repo: str, issue_num: int) -> dict[str, str]:
+    """Build the workflow_dispatch inputs dict for `template`.
+
+    Each template's workflow file declares its own inputs schema, and GitHub
+    rejects dispatches with undeclared inputs. version_trinity routes through
+    the multi-input auto-fix.yml dispatcher; older single-input templates
+    (regenerate_misaligned_distractors) just need issue_number.
+    """
+    if template == "version_trinity":
+        # auto-fix.yml requires target_repo + issue_number + fix_kind.
+        # target_repo is the watched repo whose trinity slipped, NOT auto-audit.
+        return {
+            "target_repo": repo,
+            "issue_number": str(issue_num),
+            "fix_kind": "version_trinity",
+        }
+    # Default: single input, used by single-purpose workflows that hard-code
+    # their own target (e.g. regenerate-misaligned-distractors.yml is Geri-only).
+    return {"issue_number": str(issue_num)}
+
+
+def _already_auto_dispatched(repo: str, issue_num: int, template: str) -> bool:
+    """Return True if this issue already has an auto-dispatch comment for `template`.
+
+    Closes the dedup gap that auto_audit_workflow_running misses: when the
+    previously-dispatched run has already COMPLETED but the resulting PR
+    sits open + unmerged, the next 30-min cron tick would otherwise see the
+    same critical (trinity still mismatched until the PR lands) and fire a
+    duplicate dispatch → duplicate PR. Scanning for the marker comment is
+    cheaper than an extra GH API list-PRs call and survives across runs of
+    the dispatcher itself.
+
+    Marker matches the body posted at the dispatch site below.
+    """
+    sc, data = gh(f"/repos/{OWNER}/{repo}/issues/{issue_num}/comments?per_page=50")
+    if sc != 200 or not isinstance(data, list):
+        return False
+    marker = f"🤖 Auto-dispatched `{template}`"
+    return any(marker in (c.get("body") or "") for c in data)
 
 
 # ─────────────────────────── probes ────────────────────────────
@@ -1227,6 +1285,532 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
     return issues
 
 
+# Watched repos that ship `.github/workflows/notify-auto-audit.yml` — the
+# repository_dispatch firing that gives us sub-minute push-to-probe SLA on
+# detecting CI-red main. If this set changes (a new PWA joins the family,
+# or one is retired), update both this list AND the rotation tooling
+# (`scripts/rotate_dispatch_pat.py`'s DEFAULT_REPOS).
+DISPATCH_NOTIFY_REPOS: tuple[str, ...] = (
+    "Geriatrics", "InternalMedicine", "FamilyMedicine", "ward-helper",
+)
+DISPATCH_NOTIFY_WORKFLOW = "notify-auto-audit.yml"
+
+
+def probe_dispatch_chain_health() -> list[dict[str, Any]]:
+    """Detect when the post-merge dispatch chain (auto-audit#14) is broken.
+
+    Each watched PWA ships `.github/workflows/notify-auto-audit.yml` that
+    fires a `repository_dispatch` to Eiasash/auto-audit on every
+    push-to-main. The dispatch needs `AUTO_AUDIT_DISPATCH_PAT` installed
+    as a secret in that repo, scoped Actions:write on auto-audit.
+
+    The 30-min cron is the failsafe. The dispatch path is what gives us
+    ~15s push-to-probe latency. If the dispatch PAT expires (currently a
+    short-lived session PAT — see SESSION_LEARNINGS_2026-04-29 watchlist
+    item #1), the dispatch silently degrades back to cron, and we lose
+    sub-minute SLA WITHOUT any visible signal. This probe is that signal.
+
+    What it checks: for each watched repo, look at the most recent
+    completed run of notify-auto-audit.yml.
+
+      conclusion=='success'   → healthy, no issue
+      conclusion=='failure'   → critical: dispatch broken on this repo
+      conclusion=='cancelled' → warning: someone cancelled the run
+      no completed runs       → warning: workflow exists but never ran
+                                (typical right after first install — fine
+                                if recent; flag if older than 30d)
+      workflow file missing   → critical: notify-auto-audit.yml was
+                                deleted or renamed in this repo
+
+    The single-failure threshold is intentional. `probe_workflow_failure_streaks`
+    requires N consecutive failures across recent runs and is the right
+    tool for noisy-but-eventually-self-healing workflows. notify-auto-audit
+    is neither noisy nor self-healing — its only failure mode is auth
+    (PAT dead/scope drift), which won't recover on its own. The first
+    failed push-to-main IS the signal.
+
+    Why cross_cutting and not per-repo: the typical fix is one PAT
+    rotation that recovers all four repos. Grouping the findings makes
+    that obvious in the issue body and avoids four duplicate-cause issues.
+    """
+    issues: list[dict[str, Any]] = []
+    workflow = DISPATCH_NOTIFY_WORKFLOW
+
+    for repo in DISPATCH_NOTIFY_REPOS:
+        # Pull the 5 most recent runs. We only need the latest *completed*
+        # one — runs in `in_progress` / `queued` are skipped because their
+        # conclusion is null.
+        path = (
+            f"/repos/{OWNER}/{repo}/actions/workflows/{workflow}/runs"
+            f"?per_page=5"
+        )
+        try:
+            status, data = gh(path)
+        except Exception as e:  # pragma: no cover — network/JSON glitches
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_probe_error",
+                "msg": (
+                    f"Could not query notify-auto-audit runs for {repo}: {e}. "
+                    f"Probe is non-fatal — cron failsafe still runs."
+                ),
+            })
+            continue
+
+        if status == 404:
+            # The workflow file is gone. Either the repo was renamed (we'd
+            # see a 404 on the whole repo first), or somebody deleted/
+            # renamed notify-auto-audit.yml. Either way, push-to-probe is
+            # broken for this repo.
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_chain_workflow_missing",
+                "msg": (
+                    f"{repo}: .github/workflows/{workflow} returned 404. "
+                    f"The notify-auto-audit dispatcher is gone — push-to-probe "
+                    f"SLA is broken for this repo (cron failsafe still runs). "
+                    f"Restore the workflow from sibling repo "
+                    f"(e.g. github.com/{OWNER}/Geriatrics/blob/main/.github/workflows/{workflow})."
+                ),
+            })
+            continue
+
+        if status != 200 or not isinstance(data, dict):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_unexpected_status",
+                "msg": (
+                    f"{repo}: GET notify-auto-audit runs returned HTTP {status}. "
+                    f"Probe is non-fatal."
+                ),
+            })
+            continue
+
+        runs = data.get("workflow_runs", []) or []
+
+        if not runs:
+            # No runs ever. Could be: workflow newly added and no merge yet
+            # (fine), or it never wired up (concerning but not critical).
+            # Surface as a one-time warning; future probes will reclassify
+            # once a real run lands.
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_never_ran",
+                "msg": (
+                    f"{repo}: {workflow} has no run history. Workflow exists but "
+                    f"hasn't fired yet — expected if newly installed. If this "
+                    f"persists past the next merge, check the `on: push` trigger."
+                ),
+            })
+            continue
+
+        # First completed run wins. We tolerate an in-flight run at the top.
+        latest_completed = next(
+            (r for r in runs if r.get("conclusion") in ("success", "failure", "cancelled", "timed_out", "action_required")),
+            None,
+        )
+        if not latest_completed:
+            # All recent runs are in_progress or queued. Almost certainly a
+            # transient state right at probe time — fine, will resolve.
+            continue
+
+        conclusion = latest_completed.get("conclusion")
+        run_url = latest_completed.get("html_url", "")
+        head_sha = (latest_completed.get("head_sha") or "")[:8]
+        created = latest_completed.get("created_at", "?")
+
+        if conclusion == "success":
+            # Healthy. No issue.
+            continue
+
+        if conclusion == "failure":
+            # The dispatch step failed — almost certainly the PAT. The
+            # peter-evans/repository-dispatch action surfaces "Bad credentials"
+            # with HTTP 401 when the token is dead, missing, or under-scoped.
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_chain_run_failed",
+                "msg": (
+                    f"{repo}: most recent notify-auto-audit run FAILED "
+                    f"(sha {head_sha}, {created}). Most likely cause: "
+                    f"AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the "
+                    f"Actions:write scope on Eiasash/auto-audit. Push-to-probe "
+                    f"SLA is broken; cron failsafe still runs every 30 min. "
+                    f"Fix: rotate the PAT — see scripts/DISPATCH_PAT_ROTATION.md. "
+                    f"Run: {run_url}"
+                ),
+            })
+            continue
+
+        if conclusion in ("cancelled", "timed_out", "action_required"):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_chain_run_unexpected_conclusion",
+                "msg": (
+                    f"{repo}: most recent notify-auto-audit run finished with "
+                    f"conclusion='{conclusion}' (sha {head_sha}, {created}). "
+                    f"Not necessarily broken — re-trigger on next merge to confirm. "
+                    f"Run: {run_url}"
+                ),
+            })
+
+    return issues
+
+
+# Dispatch PAT rotation thresholds. Keep in lockstep with the rotation
+# runbook (scripts/DISPATCH_PAT_ROTATION.md): the recommended PAT lifetime
+# is 90 days, so we WARN at 75 (last-2-week heads-up) and CRIT at 90+.
+DISPATCH_PAT_SECRET = "AUTO_AUDIT_DISPATCH_PAT"
+DISPATCH_PAT_WARN_DAYS = 75
+DISPATCH_PAT_CRIT_DAYS = 90
+
+
+def probe_dispatch_pat_freshness() -> list[dict[str, Any]]:
+    """Watch for AUTO_AUDIT_DISPATCH_PAT going stale.
+
+    The dispatch chain (auto-audit#14) relies on a PAT installed in each
+    watched PWA repo as the AUTO_AUDIT_DISPATCH_PAT secret. The rotation
+    runbook (scripts/DISPATCH_PAT_ROTATION.md) prescribes a 90-day cycle
+    against fine-grained PATs scoped only to Eiasash/auto-audit.
+
+    The risk this probe catches: a PAT that has expired in GitHub's eyes
+    will start failing notify-auto-audit dispatches. probe_dispatch_chain_
+    health will fire CRITICAL once the *first* failed dispatch lands — i.e.
+    after the next push-to-main on a watched repo. That's reactive. This
+    probe is the proactive counterpart: it surfaces the rotation BEFORE
+    the PAT expires by reading the secret's updated_at metadata via API.
+
+    Why state-based, not calendar-based: a calendar reminder workflow
+    would file an issue every 90 days regardless of whether you'd already
+    rotated. A state-based probe auto-clears once you rotate (because
+    updated_at moves forward), so there's no manual "close the reminder"
+    step. Less issue churn, more honest signal.
+
+    What it checks: for each watched repo,
+        GET /repos/{owner}/{repo}/actions/secrets/AUTO_AUDIT_DISPATCH_PAT
+    returns name + created_at + updated_at (NOT the secret value — that's
+    write-only, by design). We compute days_since_rotation = now -
+    updated_at and bucket:
+
+        days < WARN (75)     → silent, healthy
+        WARN ≤ days < CRIT   → warning: 14-day rotation runway
+        days ≥ CRIT (90)     → critical: rotate now or expect dispatch
+                                failures any time
+
+    Scope requirement (opt-in): this probe needs the GH_TOKEN (i.e.
+    MONITOR_PAT) to have `Secrets: Read` on the four watched repos, in
+    addition to Contents/Issues/PullRequests/Actions. A fine-grained PAT
+    without that permission gets HTTP 403 on every read. The default
+    posture is OPT-IN-SILENT: if all four repos return 403, the probe
+    emits zero findings (config gap is not a per-repo alarm condition;
+    user can read the runbook or this docstring to learn how to enable
+    it). The dispatch_chain probe still catches actual dispatch failures,
+    so missing this proactive signal degrades to "react to first failure"
+    rather than "no signal at all".
+
+    HTTP failure modes (other than 403) get distinct kinds:
+      404           → critical: secret missing on this repo (push-to-probe broken)
+      4xx/5xx other → warning: probe is non-fatal, dispatch_chain catches actual failures
+      malformed/    → warning: GitHub API contract change?
+      unparseable
+
+    Why cross_cutting: same reason as probe_dispatch_chain_health — the
+    fix is one rotation that touches all four repos. Grouping the
+    findings keeps the runbook coherent.
+    """
+    issues: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
+    unauthorized_count = 0
+
+    for repo in DISPATCH_NOTIFY_REPOS:
+        path = f"/repos/{OWNER}/{repo}/actions/secrets/{DISPATCH_PAT_SECRET}"
+        try:
+            status, data = gh(path)
+        except Exception as e:  # pragma: no cover — network/JSON glitches
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_probe_error",
+                "msg": (
+                    f"Could not query {DISPATCH_PAT_SECRET} metadata for {repo}: {e}. "
+                    f"Probe is non-fatal — dispatch_chain_health will still catch "
+                    f"actual dispatch failures."
+                ),
+            })
+            continue
+
+        if status == 404:
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_pat_missing",
+                "msg": (
+                    f"{repo}: secret {DISPATCH_PAT_SECRET} returned 404. The "
+                    f"notify-auto-audit dispatcher cannot authenticate without "
+                    f"it — push-to-probe SLA is broken for this repo (cron "
+                    f"failsafe still runs). Restore the secret per "
+                    f"scripts/DISPATCH_PAT_ROTATION.md."
+                ),
+            })
+            continue
+
+        if status == 403:
+            # Token lacks secrets:read scope on this repo. Counted but not
+            # emitted per-repo: a missing scope is one config gap, not four
+            # per-repo alarms. If ALL watched repos hit 403 we treat the
+            # probe as opt-out (silent). If some return data and others
+            # 403, that's genuinely weird (asymmetric scope) and we DO
+            # emit a per-repo warning to surface the inconsistency — see
+            # mixed-scope handling after the loop.
+            unauthorized_count += 1
+            continue
+
+        if status != 200 or not isinstance(data, dict):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_unexpected_status",
+                "msg": (
+                    f"{repo}: GET secret metadata returned HTTP {status}. "
+                    f"Probe is non-fatal."
+                ),
+            })
+            continue
+
+        updated_at_raw = data.get("updated_at")
+        if not isinstance(updated_at_raw, str):
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_metadata_malformed",
+                "msg": (
+                    f"{repo}: secret metadata missing updated_at. "
+                    f"GitHub API contract change? Probe is non-fatal."
+                ),
+            })
+            continue
+
+        try:
+            # GitHub returns ISO 8601 with trailing Z; fromisoformat handles
+            # +00:00 but not Z directly on Python <3.11 — be defensive.
+            normalized = updated_at_raw.replace("Z", "+00:00")
+            updated_at = datetime.fromisoformat(normalized)
+        except ValueError:
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_metadata_unparseable",
+                "msg": (
+                    f"{repo}: could not parse updated_at='{updated_at_raw}'. "
+                    f"Probe is non-fatal."
+                ),
+            })
+            continue
+
+        days_since = (now - updated_at).days
+
+        if days_since >= DISPATCH_PAT_CRIT_DAYS:
+            issues.append({
+                "severity": "critical",
+                "kind": "dispatch_pat_overdue",
+                "msg": (
+                    f"{repo}: {DISPATCH_PAT_SECRET} last rotated "
+                    f"{days_since} days ago ({updated_at_raw}), past the "
+                    f"{DISPATCH_PAT_CRIT_DAYS}-day threshold. Rotate per "
+                    f"scripts/DISPATCH_PAT_ROTATION.md before the PAT expires "
+                    f"and push-to-probe SLA breaks. The fix is one rotation "
+                    f"covering all watched repos."
+                ),
+            })
+        elif days_since >= DISPATCH_PAT_WARN_DAYS:
+            issues.append({
+                "severity": "warning",
+                "kind": "dispatch_pat_aging",
+                "msg": (
+                    f"{repo}: {DISPATCH_PAT_SECRET} last rotated "
+                    f"{days_since} days ago ({updated_at_raw}). Approaching "
+                    f"the {DISPATCH_PAT_CRIT_DAYS}-day rotation cadence — "
+                    f"plan to rotate within "
+                    f"{DISPATCH_PAT_CRIT_DAYS - days_since} days "
+                    f"per scripts/DISPATCH_PAT_ROTATION.md."
+                ),
+            })
+        # days_since < WARN → silent, healthy.
+
+    # Mixed-scope detection: some repos returned 403, others returned data.
+    # That's genuinely weird (per-repo permission drift on the monitoring
+    # PAT) and we want it surfaced. If ALL repos hit 403, the probe is
+    # opt-out-silent — see docstring.
+    if 0 < unauthorized_count < len(DISPATCH_NOTIFY_REPOS):
+        issues.append({
+            "severity": "warning",
+            "kind": "dispatch_pat_probe_partial_unauthorized",
+            "msg": (
+                f"{unauthorized_count} of {len(DISPATCH_NOTIFY_REPOS)} watched "
+                f"repos returned 403 on secret metadata read — the GH_TOKEN "
+                f"used by this probe has inconsistent secrets:read scope "
+                f"across the watched set. Either grant the scope on all "
+                f"four repos (recommended — enables proactive PAT-rotation "
+                f"tracking) or revoke it on all four (silent opt-out)."
+            ),
+        })
+
+    return issues
+
+
+# ward_helper_pull_by_username RPC — added 2026-04-29 alongside the
+# ward_helper_backup.username column (option 2 hybrid bridge: cross-device
+# restore via app_users login). The RPC bypasses the auth.uid()-based RLS
+# SELECT policy because cross-device pulls cross the auth.uid() boundary.
+WARD_HELPER_PULL_RPC = "ward_helper_pull_by_username"
+WARD_HELPER_PULL_SENTINEL = "__auto_audit_healthcheck_nonexistent__"
+
+
+def probe_ward_helper_pull_rpc() -> list[dict[str, Any]]:
+    """Smoke-test the ward_helper_pull_by_username(p_username) RPC.
+
+    The 2026-04-29 option 2 bridge added a SECURITY DEFINER RPC that lets
+    an authed ward-helper user fetch their encrypted backup blobs from any
+    device. It's the ONLY cross-device restore path for ward-helper —
+    direct REST SELECT remains RLS-locked to the per-device anon
+    auth.users.id, which would return nothing on a fresh device.
+
+    If the RPC breaks, every "log in on a new device → see my history"
+    flow silently fails with an empty restore. Same failure-mode shape
+    as backup_get_rpc for the PWAs, same probe shape.
+
+    Two cases:
+      Positive: pull by a known-nonexistent username
+        Expect: HTTP 200, body=[]
+        Catches: RPC unreachable (HTTP 5xx), GRANT EXECUTE revoked
+                 (HTTP 4xx), table reference broken (HTTP 5xx).
+      Sentinel: same call, asserts no row matches the dunder username
+        Catches: someone manually inserted a sentinel row → probe is
+                 polluted; clean it up.
+
+    Why no negative case (cf. backup_get): backup_get has a strict
+    whitelist that raises ERRCODE 22023 on invalid app, so probing the
+    rejection branch is meaningful. ward_helper_pull_by_username takes
+    a free-form text username — there's no whitelist to test, by design
+    (the cap is "knowing the username" + encryption).
+
+    Why no write+read round-trip: the table has a FOREIGN KEY constraint
+    `user_id REFERENCES auth.users(id)`. We can't insert a sentinel row
+    via anon REST without minting a real auth.users row first, and
+    auth.signInAnonymously() is a JS-client API the probe doesn't have.
+    The smoke (RPC reachable + returns empty for unknown username) is
+    sufficient because a broken table reference inside the RPC would
+    raise HTTP 500, not silently return [].
+    """
+    issues: list[dict[str, Any]] = []
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + "/rest/v1/rpc/" + WARD_HELPER_PULL_RPC
+
+    body = json.dumps({"p_username": WARD_HELPER_PULL_SENTINEL}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "apikey": STUDY_PLAN_SUPABASE_KEY,
+            # Note: deliberately NOT setting Authorization: Bearer here.
+            # The publishable key in `apikey` resolves to the anon role,
+            # which has GRANT EXECUTE on this RPC.
+            "User-Agent": USER_AGENT,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            status = resp.getcode()
+    except urllib.error.HTTPError as e:
+        status = e.code
+        try:
+            raw = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            raw = ""
+    except (urllib.error.URLError, TimeoutError) as e:
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_network",
+            "msg": f"{WARD_HELPER_PULL_RPC} network error: {e}",
+        })
+        return issues
+    except Exception as e:  # pragma: no cover — belt and suspenders
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_unexpected",
+            "msg": f"{WARD_HELPER_PULL_RPC} unexpected error: {e}",
+        })
+        return issues
+
+    if 500 <= status < 600:
+        # Most likely cause: the RPC body references a column or table
+        # that no longer exists (schema drift). For instance, if a future
+        # migration drops the username column or rotates ward_helper_backup
+        # to a new name, the RPC would throw `relation does not exist` or
+        # `column does not exist` here.
+        issues.append({
+            "severity": "critical",
+            "kind": "ward_helper_pull_rpc_server_error",
+            "msg": (
+                f"{WARD_HELPER_PULL_RPC} returned HTTP {status} — likely a "
+                f"schema drift breaking the function body (column or table "
+                f"reference invalid). Body: {raw[:200]!r}"
+            ),
+        })
+        return issues
+
+    if 400 <= status < 500:
+        # The function returned an error for what should be an open RPC.
+        # Almost certainly: GRANT EXECUTE was revoked, or the function
+        # was dropped.
+        issues.append({
+            "severity": "critical",
+            "kind": "ward_helper_pull_rpc_permission_drift",
+            "msg": (
+                f"{WARD_HELPER_PULL_RPC} returned HTTP {status}. Either the "
+                f"RPC was dropped or anon GRANT EXECUTE was revoked. Body: "
+                f"{raw[:200]!r}"
+            ),
+        })
+        return issues
+
+    if status != 200:
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_unexpected_status",
+            "msg": f"{WARD_HELPER_PULL_RPC} returned HTTP {status} (expected 200).",
+        })
+        return issues
+
+    # HTTP 200 — postgrest serializes a setof-returning function as a
+    # JSON array. Empty array is the happy path for a nonexistent username.
+    try:
+        parsed = json.loads(raw) if raw else None
+    except json.JSONDecodeError:
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_bad_json",
+            "msg": f"{WARD_HELPER_PULL_RPC} returned non-JSON body ({raw[:120]!r}).",
+        })
+        return issues
+
+    if parsed != []:
+        # Either the sentinel got polluted by manual writes, OR the RPC
+        # is returning something it shouldn't (e.g. ignoring the WHERE
+        # clause and dumping all rows — a serious leak).
+        issues.append({
+            "severity": "warning",
+            "kind": "ward_helper_pull_rpc_sentinel_polluted",
+            "msg": (
+                f"{WARD_HELPER_PULL_RPC}(p_username='{WARD_HELPER_PULL_SENTINEL}') "
+                f"returned a non-empty body. Either someone wrote a row with "
+                f"username='{WARD_HELPER_PULL_SENTINEL}' (clean it up) OR the "
+                f"function is no longer filtering correctly (audit the WHERE "
+                f"clause — could be a data leak). Body shape: "
+                f"{type(parsed).__name__}, len={len(parsed) if hasattr(parsed, '__len__') else '?'}"
+            ),
+        })
+
+    return issues
+
+
 # ─────────────────────────── orchestration ────────────────────────────
 
 def probe_tier2_workflows() -> list[dict[str, Any]]:
@@ -1380,6 +1964,315 @@ def probe_tier2_workflows() -> list[dict[str, Any]]:
     return issues
 
 
+# ward-helper cross-device sync — client-side wiring regression guard.
+# The 2026-04-29 migration (PR #29) added the server side: ward_helper_backup.username
+# column + ward_helper_pull_by_username RPC. The 2026-04-30 v1.31.0 ship wired the
+# client side: pushBlob's username param + pullByUsername RPC wrapper + restoreFromCloud
+# auth-aware route selection. probe_ward_helper_pull_rpc above smoke-tests the server.
+# This probe smoke-tests the *client* — it greps source on main for the markers that
+# prove the wiring hasn't silently drifted (revert, refactor accident, conflict drop).
+WARD_HELPER_SYNC_WIRING_MARKERS: list[tuple[str, str, str]] = [
+    # (filename, marker-name, regex)
+    (
+        "src/storage/cloud.ts",
+        "pullByUsername-export",
+        r"export\s+async\s+function\s+pullByUsername\s*\(",
+    ),
+    (
+        "src/storage/cloud.ts",
+        "pullByUsername-rpc-call",
+        r"\.rpc\(\s*['\"]ward_helper_pull_by_username['\"]",
+    ),
+    (
+        "src/storage/cloud.ts",
+        "pushBlob-username-param",
+        r"export\s+async\s+function\s+pushBlob\([^)]*username\??\s*:\s*string",
+    ),
+    (
+        "src/notes/save.ts",
+        "pullByUsername-import",
+        r"pullByUsername",
+    ),
+    (
+        "src/notes/save.ts",
+        "getCurrentUser-import",
+        r"from\s+['\"]@/auth/auth['\"]",
+    ),
+    (
+        "src/notes/save.ts",
+        "restore-source-field",
+        r"source\s*:\s*['\"](?:username|anon)['\"]|source:\s*user\s*\?",
+    ),
+]
+
+
+def probe_ward_helper_sync_wiring() -> list[dict[str, Any]]:
+    """Verify ward-helper's client-side cross-device sync wiring stays in place.
+
+    Server side is covered by probe_ward_helper_pull_rpc above (RPC reachable,
+    GRANT EXECUTE intact, sentinel-empty round-trip). But a working RPC with
+    no client caller is invisible to the user — the cross-device flow is
+    silently broken with no error.
+
+    This probe greps the v1.31.0 wiring markers on `main`. Any missing marker
+    raises a WARNING (not CRITICAL): the failure mode is "cross-device restore
+    returns empty when it should return rows," which is silent + recoverable
+    by re-introducing the wiring, not user-data loss.
+
+    Markers are deliberately loose-but-specific: they tolerate local refactors
+    (renaming variables, extracting helpers, moving auth import to a barrel)
+    while still catching the high-impact regressions: pullByUsername removed,
+    pushBlob's username param dropped, restoreFromCloud reverted to the
+    legacy single-path version.
+
+    If this probe ever needs to handle a deliberate refactor that breaks the
+    grep pattern, update WARD_HELPER_SYNC_WIRING_MARKERS above to match the
+    new code shape — that's the documented contract.
+    """
+    issues: list[dict[str, Any]] = []
+    repo = "ward-helper"
+
+    # Cache file contents per call so we hit the API once per file, not
+    # once per marker.
+    file_cache: dict[str, Optional[str]] = {}
+    for path, _name, _pattern in WARD_HELPER_SYNC_WIRING_MARKERS:
+        if path in file_cache:
+            continue
+        status, data = gh(f"/repos/{OWNER}/{repo}/contents/{path}")
+        if status != 200 or not isinstance(data, dict) or "content" not in data:
+            file_cache[path] = None
+            continue
+        try:
+            file_cache[path] = base64.b64decode(data["content"]).decode("utf-8")
+        except Exception as e:
+            sys.stderr.write(f"[probe] ward_helper_sync_wiring decode {path}: {e}\n")
+            file_cache[path] = None
+
+    for path, name, pattern in WARD_HELPER_SYNC_WIRING_MARKERS:
+        content = file_cache.get(path)
+        if content is None:
+            issues.append({
+                "severity": "warning",
+                "kind": "ward_helper_sync_wiring_file_missing",
+                "msg": (
+                    f"{repo}:{path} not found on main — cross-device sync wiring "
+                    f"check skipped. If this file moved, update "
+                    f"WARD_HELPER_SYNC_WIRING_MARKERS in scripts/probe.py."
+                ),
+                "url": f"https://github.com/{OWNER}/{repo}/blob/main/{path}",
+            })
+            continue
+        if not re.search(pattern, content):
+            issues.append({
+                "severity": "warning",
+                "kind": "ward_helper_sync_wiring_marker_missing",
+                "msg": (
+                    f"{repo}:{path} missing wiring marker '{name}' "
+                    f"(pattern: {pattern}). Cross-device restore likely silently "
+                    f"broken — server RPC works but no client caller. Restore the "
+                    f"wiring or update the marker if this was a deliberate refactor."
+                ),
+                "url": f"https://github.com/{OWNER}/{repo}/blob/main/{path}",
+            })
+
+    return issues
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feedback queue triage (probe_feedback_queue)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FEEDBACK_TABLES: dict[str, tuple[str, str]] = {
+    "shlav_feedback":     ("geri",      "Geriatrics"),
+    "mishpacha_feedback": ("mishpacha", "FamilyMedicine"),
+    "pnimit_feedback":    ("pnimit",    "InternalMedicine"),
+}
+
+
+def _supabase_get(path: str) -> tuple[int, Any]:
+    """GET against the shared Supabase REST API with the anon key."""
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + path
+    try:
+        return _http_json(
+            url,
+            headers={
+                "apikey": STUDY_PLAN_SUPABASE_KEY,
+                "Authorization": f"Bearer {STUDY_PLAN_SUPABASE_KEY}",
+                "Content-Type": "application/json",
+            },
+        )
+    except Exception as e:
+        return 0, str(e)
+
+
+def _supabase_rpc(name: str, body: dict) -> int:
+    """POST to a Supabase RPC.  Returns HTTP status code."""
+    url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + f"/rest/v1/rpc/{name}"
+    encoded = json.dumps(body).encode()
+    try:
+        sc, _ = _http_json(
+            url,
+            headers={
+                "apikey": STUDY_PLAN_SUPABASE_KEY,
+                "Authorization": f"Bearer {STUDY_PLAN_SUPABASE_KEY}",
+                "Content-Type": "application/json",
+            },
+            body=encoded,
+            method="POST",
+        )
+        return sc
+    except Exception:
+        return 0
+
+
+def probe_feedback_queue() -> list[dict[str, Any]]:
+    """
+    Scans all three *_feedback tables for unprocessed rows and creates
+    GitHub issues in the relevant PWA repo.
+
+    Statuses picked up:
+      pending_trivial  — classified by Netlify webhook as auto-fixable
+      pending_review   — classified as needing human review
+      new (>15 min)    — webhook missed; fallback
+
+    For trivial rows  → labels: feedback + auto-audit + auto-fix-eligible
+                        status updated to: auto_fix_dispatched
+    For review rows   → labels: feedback + auto-audit
+                        status updated to: escalated
+
+    Findings are WARN (informational) so the health dashboard shows the queue.
+    Issue creation is idempotent via file_issue's title-dedupe logic.
+    """
+    findings: list[dict[str, Any]] = []
+
+    cutoff = (datetime.utcnow() - __import__("datetime").timedelta(minutes=15)).strftime(
+        "%Y-%m-%dT%H:%M:%S+00:00"
+    )
+
+    for table, (app_key, repo) in _FEEDBACK_TABLES.items():
+        # Rows classified by Netlify webhook
+        sc1, pending = _supabase_get(
+            f"/rest/v1/{table}"
+            f"?status=in.(pending_trivial,pending_review)"
+            f"&select=id,type,message,context,app_version,assessment,created_at,status"
+            f"&order=id.asc"
+        )
+        if sc1 != 200:
+            findings.append({
+                "severity": "warning",
+                "kind": "feedback_queue_fetch_error",
+                "msg": f"feedback_queue: failed to query {table} (HTTP {sc1})",
+            })
+            pending = []
+
+        # Stale 'new' rows that the webhook never processed
+        sc2, stale = _supabase_get(
+            f"/rest/v1/{table}"
+            f"?status=eq.new"
+            f"&created_at=lt.{urllib.request.quote(cutoff)}"
+            f"&select=id,type,message,context,app_version,assessment,created_at,status"
+            f"&order=id.asc"
+        )
+        rows: list[dict] = (pending if isinstance(pending, list) else []) + (
+            stale if sc2 == 200 and isinstance(stale, list) else []
+        )
+
+        for row in rows:
+            row_id = row.get("id")
+            if row_id is None:
+                continue
+
+            assessment: dict = row.get("assessment") or {}
+            if not isinstance(assessment, dict):
+                assessment = {}
+            verdict = assessment.get("verdict", "needs_review")
+            if verdict not in ("trivial", "needs_review"):
+                verdict = "needs_review"
+
+            # Track delivery path so probe-rescued rows are distinguishable
+            # from webhook-delivered rows in post-hoc debugging queries.
+            is_fallback = row.get("status") == "new"  # webhook never ran
+            assessment = {**assessment, "delivery": "probe-fallback" if is_fallback else "webhook"}
+
+            is_trivial = verdict == "trivial"
+            labels = ["feedback", "auto-audit"] + (["auto-fix-eligible"] if is_trivial else [])
+            final_status = "auto_fix_dispatched" if is_trivial else "escalated"
+            severity_tag = "trivial" if is_trivial else "needs-review"
+
+            q_ctx = str(row.get("context", ""))
+            q_ctx_short = q_ctx[:140] + ("…" if len(q_ctx) > 140 else "")
+            reason = assessment.get("reason", "Webhook missed — no automated classification")
+            suggested_fix = assessment.get("suggested_fix", "")
+
+            title = (
+                f"[feedback/{app_key}] #{row_id} — "
+                f"{row.get('type', '?')} ({severity_tag})"
+            )
+            body_lines = [
+                f"_Auto-generated by `Eiasash/auto-audit` `probe_feedback_queue` "
+                f"at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}._",
+                "",
+                "## Submission",
+                "",
+                f"- **App**: `{app_key}`",
+                f"- **Row ID**: {row_id}",
+                f"- **Type**: `{row.get('type', '?')}`",
+                f"- **User message**: `{row.get('message', '')}`",
+                f"- **Context**: `{q_ctx_short}`",
+                f"- **App version**: {row.get('app_version', '?')}",
+                f"- **Submitted**: {row.get('created_at', '?')}",
+                f"- **Delivery**: {'⚠️ probe-fallback (webhook missed)' if is_fallback else '✅ webhook'}",
+                "",
+                "## Classification",
+                "",
+                f"- **Verdict**: `{verdict}`",
+                f"- **Reason**: {reason}",
+            ]
+            if suggested_fix:
+                body_lines += [f"- **Suggested fix**: {suggested_fix}"]
+            body_lines += [""]
+            if is_trivial:
+                body_lines.append(
+                    "> ⚙️ Labeled `auto-fix-eligible` — "
+                    "Tier 2 `investigate` template will attempt an automated fix."
+                )
+            else:
+                body_lines.append(
+                    "> 👤 Requires human review by @Eiasash — "
+                    "clinical dispute or ambiguous question."
+                )
+
+            issue_num: Optional[int] = None
+            if not DRY_RUN:
+                issue_num = file_issue(repo, title, "\n".join(body_lines), labels)
+                sc_rpc = _supabase_rpc(
+                    "feedback_set_status",
+                    {"p_app": app_key, "p_id": row_id, "p_status": final_status,
+                     "p_gh_issue": issue_num},
+                )
+                if sc_rpc not in (200, 204):
+                    sys.stderr.write(
+                        f"[feedback-queue] failed to update {table}#{row_id}: HTTP {sc_rpc}\n"
+                    )
+
+            findings.append({
+                "severity": "warning",
+                "kind": "feedback_queue_item",
+                "msg": (
+                    f"feedback/{app_key}#{row_id} ({row.get('type','?')}) → "
+                    f"{verdict}. "
+                    + (f"{repo}#{issue_num}" if issue_num else "DRY_RUN")
+                ),
+                "row_id": row_id,
+                "verdict": verdict,
+                "issue_num": issue_num,
+                "repo": repo,
+            })
+
+    return findings
+
+
 def probe_scheduler_health() -> list[dict[str, Any]]:
     """Self-check: did the previous Tier 1 cron tick happen on time?
 
@@ -1450,6 +2343,10 @@ def run() -> dict[str, Any]:
             "study_plan_rpc": [],
             "backup_get_rpc": [],
             "tier2_health": [],
+            "dispatch_chain": [],
+            "ward_helper_pull_rpc": [],
+            "ward_helper_sync_wiring": [],
+            "feedback_queue": [],
         },
     }
 
@@ -1520,6 +2417,49 @@ def run() -> dict[str, Any]:
             except Exception as e:
                 sys.stderr.write(f"[probe] distractor_alignment failed: {e}\n")
 
+        # Deploy verification probe (Phase 1 — all 5 watched PWA repos with
+        # verify-deploy.sh). Replicates the per-repo verify-deploy.sh logic
+        # from the auto-audit side; catches Pages publish failures, CDN
+        # staleness, and tree-shake-dropped version literals that
+        # probe_live_sw / probe_deploy_drift miss.
+        if repo in DEPLOY_CONFIG:
+            try:
+                for f in check_version_literal(repo):
+                    sev_map = {"CRITICAL": "critical", "WARN": "warning", "ERROR": "error"}
+                    issue = {
+                        "severity": sev_map.get(f["severity"], "warning"),
+                        "kind": f.get("template") or "deploy-verification",
+                        "msg": f["title"],
+                    }
+                    if f.get("template"):
+                        issue["auto_fix"] = f["template"]
+                    issue["body"] = f["body"]
+                    issue["labels"] = f["labels"]
+                    issue["url"] = f"https://github.com/{OWNER}/{repo}"
+                    repo_report["issues"].append(issue)
+            except Exception as e:
+                sys.stderr.write(f"[probe] deploy_verification ({repo}) failed: {e}\n")
+
+        # Pnimit-specific: canonical question-content sampling. NEW
+        # capability this phase. Detects fabricated stems in the deployed
+        # bundle that don't match any session file under
+        # scripts/exam_audit/canonical/. NOT auto-fixable by design.
+        if repo == "InternalMedicine":
+            try:
+                for f in check_pnimit_canonical_sample():
+                    sev_map = {"CRITICAL": "critical", "WARN": "warning", "ERROR": "error"}
+                    issue = {
+                        "severity": sev_map.get(f["severity"], "warning"),
+                        "kind": "canonical-fabrication",
+                        "msg": f["title"],
+                        "body": f["body"],
+                        "labels": f["labels"],
+                        "url": f"https://github.com/{OWNER}/{repo}/tree/main/scripts/exam_audit/canonical",
+                    }
+                    repo_report["issues"].append(issue)
+            except Exception as e:
+                sys.stderr.write(f"[probe] pnimit_canonical_sample failed: {e}\n")
+
         report["repos"][repo] = repo_report
 
     sys.stderr.write("[probe] sibling drift\n")
@@ -1537,11 +2477,26 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] backup_get rpc smoke\n")
     report["cross_cutting"]["backup_get_rpc"] = probe_backup_get_rpc()
 
+    sys.stderr.write("[probe] dispatch chain health\n")
+    report["cross_cutting"]["dispatch_chain"] = probe_dispatch_chain_health()
+
+    sys.stderr.write("[probe] dispatch PAT freshness\n")
+    report["cross_cutting"]["dispatch_pat_freshness"] = probe_dispatch_pat_freshness()
+
+    sys.stderr.write("[probe] ward_helper pull rpc smoke\n")
+    report["cross_cutting"]["ward_helper_pull_rpc"] = probe_ward_helper_pull_rpc()
+
+    sys.stderr.write("[probe] ward_helper sync wiring (client-side static check)\n")
+    report["cross_cutting"]["ward_helper_sync_wiring"] = probe_ward_helper_sync_wiring()
+
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
 
     sys.stderr.write("[probe] tier2 health\n")
     report["cross_cutting"]["tier2_health"] = probe_tier2_workflows()
+
+    sys.stderr.write("[probe] feedback queue\n")
+    report["cross_cutting"]["feedback_queue"] = probe_feedback_queue()
 
     return report
 
@@ -1610,6 +2565,32 @@ def render_md(report: dict[str, Any]) -> str:
         worst = "🔴" if any(i.get("severity") == "critical" for i in bgr) else "🟡"
         lines.append(f"## {worst} Cross-cutting: backup_get RPC smoke")
         for i in bgr:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # Dispatch chain health (notify-auto-audit.yml on each watched PWA)
+    dch = report["cross_cutting"].get("dispatch_chain", [])
+    if dch:
+        worst = "🔴" if any(i.get("severity") == "critical" for i in dch) else "🟡"
+        lines.append(f"## {worst} Cross-cutting: post-merge dispatch chain")
+        for i in dch:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # ward_helper_pull_by_username RPC smoke (cross-device restore path)
+    whp = report["cross_cutting"].get("ward_helper_pull_rpc", [])
+    if whp:
+        worst = "🔴" if any(i.get("severity") == "critical" for i in whp) else "🟡"
+        lines.append(f"## {worst} Cross-cutting: ward_helper pull-by-username RPC")
+        for i in whp:
+            tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
+            lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
+        lines.append("")
+    # ward_helper client-side sync wiring (static-source regression guard)
+    whw = report["cross_cutting"].get("ward_helper_sync_wiring", [])
+    if whw:
+        lines.append("## 🟡 Cross-cutting: ward_helper sync wiring (client-side)")
+        for i in whw:
             tag = {"critical": "🔴", "warning": "🟡", "error": "🟠"}.get(i.get("severity"), "⚪")
             lines.append(f"- {tag} [{i['kind']}] {i['msg']}")
         lines.append("")
@@ -1769,13 +2750,26 @@ def main() -> int:
             # Only templates listed in AUTO_DISPATCH_TEMPLATES are eligible —
             # anything else stays manual until it's earned trust.
             # One dispatch per probe cycle per repo (the workflow itself is
-            # idempotent re: duplicate runs via auto_audit_workflow_running).
+            # idempotent re: duplicate runs via auto_audit_workflow_running),
+            # AND we additionally guard against duplicate-PR-spam across
+            # cycles via _already_auto_dispatched.
             if issue_num is not None and not AUTO_DISPATCH_DISABLED:
                 for crit in crits:
                     template = crit.get("auto_fix")
                     if template not in AUTO_DISPATCH_TEMPLATES:
                         continue
                     wf_file, wf_ref = AUTO_DISPATCH_TEMPLATES[template]
+                    # Cross-cycle dedup: if a previous probe run already fired
+                    # for this same issue, the previous PR is still on its way
+                    # (or sitting open). Don't pile on.
+                    if _already_auto_dispatched(repo, issue_num, template):
+                        sys.stderr.write(
+                            f"[auto-dispatch] already-dispatched marker found "
+                            f"on {repo}#{issue_num} for {template}; "
+                            f"skipping silently\n"
+                        )
+                        dispatched.append((repo, template, issue_num, False))
+                        break
                     if auto_audit_workflow_running(wf_file):
                         sys.stderr.write(
                             f"[auto-dispatch] {wf_file} already running; "
@@ -1800,7 +2794,7 @@ def main() -> int:
                         break
                     ok = dispatch_auto_audit_workflow(
                         wf_file,
-                        inputs={"issue_number": str(issue_num)},
+                        inputs=_dispatch_inputs(template, repo, issue_num),
                         ref=wf_ref,
                     )
                     sys.stderr.write(
@@ -1896,6 +2890,27 @@ def main() -> int:
             "instead of `samega_backups`). If `_whitelist_bypassed`, the "
             "`IF p_app NOT IN (...)` guard was removed and ANY app string "
             "is now passed through to the lookup — fix immediately.",
+            "* For `dispatch_chain_run_failed`: the post-merge "
+            "repository_dispatch chain is broken. The 30-min cron failsafe "
+            "still runs, but sub-minute push-to-probe SLA is lost until the "
+            "PAT is rotated. Run `python scripts/rotate_dispatch_pat.py` "
+            "with a fresh fine-grained PAT (Contents:read + Actions:write "
+            "on Eiasash/auto-audit). See `scripts/DISPATCH_PAT_ROTATION.md`.",
+            "* For `dispatch_chain_workflow_missing`: the affected watched "
+            "repo lost `.github/workflows/notify-auto-audit.yml`. Restore "
+            "it from any sibling watched repo — the file is identical "
+            "across all four.",
+            "* For `ward_helper_pull_rpc_*`: the cross-device restore path "
+            "for ward-helper (option 2 hybrid bridge, 2026-04-29). Check "
+            "`public.ward_helper_pull_by_username(p_username)` in Supabase "
+            "project `krmlzwwelqvlfslwltol`. If `_server_error`, the "
+            "function body's WHERE clause references a column that drifted "
+            "(most likely the `username` column on ward_helper_backup "
+            "was dropped or renamed). If `_permission_drift`, GRANT EXECUTE "
+            "was revoked on anon — re-grant with `GRANT EXECUTE ON FUNCTION "
+            "public.ward_helper_pull_by_username(text) TO anon, authenticated;`. "
+            "If `_sentinel_polluted` AND the sentinel id matches the dunder, "
+            "delete via SQL (table has no anon DELETE policy).",
             "* Close this issue once the next probe (≤30 min) reports green.",
         ]
         file_issue("auto-audit", title, "\n".join(body_lines), ["auto-audit", "cross-cutting"])

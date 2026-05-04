@@ -21,7 +21,7 @@ Three tiers, build-on-each-other:
 |------|------|------|--------------|--------|
 | **1** | Deterministic probe → opens GitHub issues on red findings, **auto-dispatches known fix templates** | Free | every 30 min during work hours, hourly at night | ✅ live |
 | **2** | Auto-fix dispatcher (PR back to target repo) — manual entrypoint AND auto-dispatch target | Free for `version_trinity` / `sibling_sync` / `regenerate_misaligned_distractors`; `ANTHROPIC_API_KEY`-gated for `investigate` | dispatched by Tier 1 for known templates; manual `workflow_dispatch` otherwise | ✅ live; `version_trinity` and `regenerate_misaligned_distractors` proven end-to-end on Geri 2026-04-28; `investigate` wired 2026-04-28 (Sonnet 4.6 headless via Claude Code CLI; requires `ANTHROPIC_API_KEY` secret) |
-| **3** | Cross-repo synthesis (sibling sync, secret-rotation reminders, spend trends) | Free | weekly | 🟡 planned |
+| **3** | Cross-repo synthesis (probe firings, workflow streaks, spend trajectory, secret-rotation deadlines) | Free (≤$0.05/wk if Claude narrative enabled) | weekly Sunday 06:00 UTC | ✅ live |
 
 ### Tier 1 — `health-check.yml` + `scripts/probe.py`
 
@@ -123,12 +123,57 @@ radius — they get promoted into the allowlist and Tier 1 starts dispatching
 them automatically. Kill switch: set `AUTO_DISPATCH_DISABLED=1` in the
 cron env to revert all auto-dispatch to manual without a code change.
 
-### Tier 3 — planned
+### Tier 3 — `tier3-synthesis.yml` + `scripts/tier3_synthesis.py`
 
-- Diff sibling-engine files weekly and auto-PR the canonical version to drifting siblings.
-- Track open security issues age (e.g. `Geriatrics #79` rotation reminder); bump severity after N days.
-- Watch monthly token-usage trend on `Toranot` — alarm on month-over-month spike (runaway-loop indicator).
-- Generate a "state-of-the-suite" markdown report each Sunday and pin to a tracker issue in this repo.
+Weekly cross-repo synthesis. Runs every **Sunday 06:00 UTC** (= 09:00 IDT) and
+opens or comments on a GitHub issue tagged `tier3-synthesis` in this repo.
+Manually triggerable via Actions tab → `Tier 3 — Weekly synthesis` →
+Run workflow.
+
+What it surfaces (in this order):
+
+1. **Action needed** — emergent signals worth attention this week. Sources:
+   - Probes that fired in ≥3 reports during the window (recurring pattern).
+   - Workflows that failed across ≥3 distinct SHAs (streak, not flap).
+   - Spend trajectory projecting to break the $400 MTD hard threshold.
+   - Open auto-audit issues older than 14 days (warn) / 30 days (crit).
+   - `AUTO_AUDIT_DISPATCH_PAT` rotation deadline (warn at 60d, crit at 90d
+     from install date `2026-04-29`).
+2. **Narrative** _(optional, if `ANTHROPIC_API_KEY` set)_ — single Sonnet 4.6
+   call (~$0.05) that turns the structured facts into 2-4 paragraphs of
+   pattern-spotting. Gated by hard prompt constraints: no speculation, no
+   fix proposals, max 250 words, "no emergent patterns" if true.
+3. **Cross-cutting probe activity** — every probe that fired this week with
+   firing count + last-firing time + sample message excerpts.
+4. **Spend trajectory** — earliest vs latest snapshot in window, MTD delta,
+   projected end-of-month linear extrapolation.
+5. **Per-repo activity** — live SW, version bumps in window, workflow
+   failures (sorted by failure count, capped at 5/repo, known flaps from
+   `KNOWN_FLAP_WORKFLOWS` marked), recent commits to main, recent merged
+   PRs.
+6. **Open issues** — auto-audit's own queue (by label) + each watched repo's
+   open `auto-audit`-labeled findings.
+
+Idempotency: if there's already an open issue tagged `tier3-synthesis`, the
+new synthesis is appended as a comment instead of opening a duplicate.
+
+Local testing:
+
+```bash
+# Fully offline, no GH calls, no Claude:
+python3 scripts/tier3_synthesis.py --dry-run --no-fetch-github --no-narrative
+
+# Online with PAT but no Claude:
+MONITOR_PAT=... python3 scripts/tier3_synthesis.py --dry-run --no-narrative
+
+# Full pipeline against current state, no issue created:
+MONITOR_PAT=... ANTHROPIC_API_KEY=... \
+  python3 scripts/tier3_synthesis.py --dry-run
+```
+
+Cost guard: the Claude narrative is suppressed if the structured-facts payload
+exceeds 20 KB (defensive against an unbounded growth bug in upstream probes).
+At normal volumes the payload is ~2-5 KB.
 
 ## Setup (one-time)
 

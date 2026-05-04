@@ -98,13 +98,17 @@ def build_topic_records(label, topics_raw, questions_raw, overlay):
 
     total = sum(r["n_questions"] for r in records)
     if total == 0:
+        # 2-decimal precision matches the per-repo data/syllabus_data.json refresh
+        # (Geri v10.64.18+) — keeps JS↔Python algo output aligned. Was 1 decimal
+        # until 2026-05-03; with the smaller post-orphan-delete bank, 1-decimal
+        # rounding boundaries diverged the JS and Python hour allocations.
         for r in records:
-            r["frequency_pct"] = round(100 / len(records), 1)
+            r["frequency_pct"] = round(100 / len(records), 2)
             r["weight"] = 1.0
     else:
         for r in records:
             pct = r["n_questions"] / total * 100
-            r["frequency_pct"] = round(pct, 1)
+            r["frequency_pct"] = round(pct, 2)
             r["weight"] = round(r["n_questions"] / (total / len(records)), 2)
     records.sort(key=lambda r: -r["n_questions"])
     return records, len(qs)
