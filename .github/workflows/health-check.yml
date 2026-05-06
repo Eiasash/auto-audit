@@ -10,6 +10,8 @@ on:
   # Each watched repo (Geri/Pnimit/Mishpacha/ward-helper) fires this dispatch
   # via its own .github/workflows/notify-auto-audit.yml on push-to-main.
   # Closes the up-to-30-min cron gap to seconds-after-merge. See issue #14.
+  # Probe sweeps all 5 watched repos regardless of which one fired (Phase 1
+  # probe_deploy_verification — auto-audit PR #25). Payload is informational only.
   repository_dispatch:
     types: [watched-repo-merge]
   workflow_dispatch:

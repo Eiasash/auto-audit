@@ -1,0 +1,57 @@
+# actionlint — guard against broken workflow files at PR time.
+#
+# Why this exists: 2026-05-01, PR #25 (probe_deploy_verification Phase 1)
+# introduced a duplicate `repository_dispatch:` key in health-check.yml. YAML
+# allows it, GitHub Actions rejects it at parse time, and ALL trigger types
+# (schedule, repository_dispatch, workflow_dispatch) silently died. Net effect:
+# 10-hour monitoring blackout (11:31–21:40 UTC). See commit 7cd58d4 for the
+# postmortem and the explicit "worth a follow-up" note that this hook satisfies.
+#
+# actionlint catches:
+#   - duplicate trigger keys (the bug above)
+#   - invalid `if:` expressions
+#   - missing/wrong `runs-on`
+#   - deprecated action versions
+#   - shellcheck on `run:` blocks (severity warning+ only — see below)
+#   - and more — see https://github.com/rhysd/actionlint
+#
+# Shellcheck severity is filtered to `warning` and above. The default
+# (`info` and `style` included) flags lots of stylistic noise inside
+# heredoc'd workflow scripts — SC2086 word-splitting, SC2001 sed-vs-replace,
+# SC2012 ls-vs-find — none of which would have caught the duplicate-key
+# bug. We keep real-bug shellcheck (warning/error) and drop the noise
+# so this hook stays useful instead of becoming a CI-blocker for stylistic
+# drift. To disable shellcheck entirely, change to: -shellcheck=""
+
+name: actionlint
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actionlint.yaml'
+  # PR trigger has no paths filter so this always runs on every PR — needed
+  # to satisfy the branch-protection required-check rule (a required check
+  # that never runs blocks merge indefinitely on the "expected" status).
+  # The job is fast (~15-30s) so always-on cost is negligible.
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Lint .github/workflows/*.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install actionlint
+        id: install
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          echo "actionlint=$(pwd)/actionlint" >> "$GITHUB_OUTPUT"
+
+      - name: Run actionlint
+        run: ${{ steps.install.outputs.actionlint }} -color -shellcheck="shellcheck -S warning"

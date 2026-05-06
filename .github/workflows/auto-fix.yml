@@ -216,6 +216,16 @@ jobs:
              zero-diff and exits cleanly with no PR.
           6. After fixing, write a one-paragraph summary of what changed and why to
              /tmp/investigate-summary.md. The runner uses this as the PR body.
+          7. NEVER modify the `c` (correct answer) field of any question without a source PDF
+             citation. If the issue involves a wrong answer letter in questions.json or similar:
+             a. Locate the source PDF (IMA exam PDF, typically in the repo or referenced in
+                the issue body).
+             b. Find the passage that confirms the correct answer.
+             c. Include a verbatim quote (≤30 words) and page/section reference in
+                /tmp/investigate-summary.md: "SOURCE: [filename] p.[N] — "[quote]""
+             d. If you cannot locate the PDF or confirm the answer from the source, write
+                "Cannot confirm correct answer without source PDF — halting" to
+                /tmp/investigate-failure.md and stop. Do NOT flip `c` on user assertion alone.
 
           Issue context:
 

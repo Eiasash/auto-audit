@@ -1,0 +1,382 @@
+{
+  "generated_at": "2026-04-30T20:58:15.801795+00:00",
+  "tool": "auto-audit Tier 1 monitor",
+  "repos": {
+    "Geriatrics": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "10.63.0",
+          "shlav-a-mega.html": "10.63.0"
+        },
+        "live_sw_version": "10.63.0",
+        "workflows": {
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "100ee62",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/25188549484",
+            "updated_at": "2026-04-30T20:48:01Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "100ee62",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/25188549479",
+            "updated_at": "2026-04-30T20:48:21Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "100ee62",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/25188549505",
+            "updated_at": "2026-04-30T20:48:25Z"
+          },
+          "pages build and deployment": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "100ee62",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/25188548515",
+            "updated_at": "2026-04-30T20:48:58Z"
+          },
+          "Distractor Autopsy Generator": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "7d9ccff",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/25187546188",
+            "updated_at": "2026-04-30T20:24:59Z"
+          }
+        }
+      }
+    },
+    "InternalMedicine": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "src/core/constants.js": "10.4.0",
+          "sw.js": "10.4.0"
+        },
+        "live_sw_version": "10.4.0",
+        "workflows": {
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "001a405",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/25188499528",
+            "updated_at": "2026-04-30T20:46:58Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "001a405",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/25188499531",
+            "updated_at": "2026-04-30T20:46:59Z"
+          },
+          "Deploy to GitHub Pages": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "001a405",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/25188499521",
+            "updated_at": "2026-04-30T20:47:26Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "001a405",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/25188499518",
+            "updated_at": "2026-04-30T20:47:13Z"
+          },
+          "Distractor Autopsy Generator": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "b25c2fc",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/25187765618",
+            "updated_at": "2026-04-30T20:30:04Z"
+          }
+        }
+      }
+    },
+    "FamilyMedicine": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "1.18.0",
+          "src/core/constants.js": "1.18.0",
+          "sw.js": "1.18.0"
+        },
+        "live_sw_version": "1.18.0",
+        "workflows": {
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ab8bf61",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/25188490615",
+            "updated_at": "2026-04-30T20:46:39Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ab8bf61",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/25188490612",
+            "updated_at": "2026-04-30T20:46:55Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ab8bf61",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/25188490669",
+            "updated_at": "2026-04-30T20:46:51Z"
+          },
+          "Deploy to GitHub Pages": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ab8bf61",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/25188490652",
+            "updated_at": "2026-04-30T20:47:18Z"
+          },
+          "Distractor Autopsy Generator": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "020de6c",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/25187525338",
+            "updated_at": "2026-04-30T20:24:27Z"
+          }
+        }
+      }
+    },
+    "ward-helper": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "1.32.0"
+        },
+        "live_sw_version": "1.32.0",
+        "workflows": {
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "721374e",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/25186397272",
+            "updated_at": "2026-04-30T19:58:05Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "721374e",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/25186397288",
+            "updated_at": "2026-04-30T19:58:46Z"
+          },
+          "Deploy to GitHub Pages": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "721374e",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/25186397249",
+            "updated_at": "2026-04-30T19:58:34Z"
+          }
+        }
+      }
+    },
+    "Toranot": {
+      "issues": [],
+      "raw": {
+        "workflows": {
+          "Netlify Deploy Monitor": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c980299",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/25177217430",
+            "updated_at": "2026-04-30T16:32:58Z"
+          },
+          "CI / Deploy": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c980299",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/25177217442",
+            "updated_at": "2026-04-30T16:33:45Z"
+          },
+          "Toranot Weekly Audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "36d8238",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/24979180381",
+            "updated_at": "2026-04-27T06:04:22Z"
+          }
+        },
+        "self_audit": {
+          "status": "HEALTHY"
+        },
+        "skill_snapshot": {
+          "patientCount": 13,
+          "tokenUsage": {
+            "currentMonth": "2026-04",
+            "currentMonthTotals": {
+              "input_tokens": 21514923,
+              "output_tokens": 9074484,
+              "call_count": 29465
+            },
+            "allTimeTotals": {
+              "input_tokens": 21515723,
+              "output_tokens": 9074834,
+              "call_count": 29469
+            }
+          },
+          "claudeModel": "claude-sonnet-4-6",
+          "recentErrorCount": 0
+        }
+      }
+    },
+    "watch-advisor2": {
+      "issues": [],
+      "raw": {
+        "workflows": {
+          "Weekly Autonomous Audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "d12f5c7",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24980775021",
+            "updated_at": "2026-04-27T06:52:02Z"
+          },
+          "npm_and_yarn in /. for uuid - Update #1337050408": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "0556a21",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24927133067",
+            "updated_at": "2026-04-25T08:51:16Z"
+          },
+          "npm_and_yarn in /. for uuid - Update #1337050210": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "4e3718d",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24927110995",
+            "updated_at": "2026-04-25T08:49:52Z"
+          },
+          "npm_and_yarn in /. for postcss - Update #1337050208": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "4e3718d",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24927110499",
+            "updated_at": "2026-04-25T08:50:11Z"
+          },
+          "npm_and_yarn in /. for uuid - Update #1334757223": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "fa61ec5",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24823156617",
+            "updated_at": "2026-04-23T07:40:58Z"
+          },
+          "npm_and_yarn in /. for tar-fs - Update #1332395170": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "0868d11",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24754250288",
+            "updated_at": "2026-04-22T00:50:31Z"
+          },
+          "npm_and_yarn in /. for tar-fs - Update #1332347043": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "0868d11",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24752485129",
+            "updated_at": "2026-04-21T23:50:57Z"
+          },
+          "npm_and_yarn in /. for tar-fs - Update #1332328469": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "0868d11",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24751575794",
+            "updated_at": "2026-04-21T23:22:17Z"
+          },
+          "npm_and_yarn in /. for cookie - Update #1328735339": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "c53a94d",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24608432112",
+            "updated_at": "2026-04-18T16:01:30Z"
+          },
+          "npm_and_yarn in /. for tar-fs - Update #1328735338": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "c53a94d",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24608431976",
+            "updated_at": "2026-04-18T16:01:30Z"
+          },
+          "npm_and_yarn in /. for ws - Update #1328735330": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "c53a94d",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24608431057",
+            "updated_at": "2026-04-18T16:01:29Z"
+          },
+          "npm_and_yarn in /. for ws - Update #1319651148": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "ddc6324",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24325850398",
+            "updated_at": "2026-04-13T04:36:16Z"
+          },
+          "npm_and_yarn in /. for cookie - Update #1319651114": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "ddc6324",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24325850199",
+            "updated_at": "2026-04-13T04:36:38Z"
+          },
+          "npm_and_yarn in /. for tar-fs - Update #1319651103": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "ddc6324",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24325849887",
+            "updated_at": "2026-04-13T04:36:13Z"
+          },
+          "npm_and_yarn in /. for cookie - Update #1319635979": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "bcf2f33",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24325652192",
+            "updated_at": "2026-04-13T04:28:29Z"
+          },
+          "npm_and_yarn in /. for tar-fs - Update #1319635934": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "bcf2f33",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24325651136",
+            "updated_at": "2026-04-13T04:28:31Z"
+          },
+          "npm_and_yarn in /. for ws - Update #1319635886": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "bcf2f33",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24325650636",
+            "updated_at": "2026-04-13T04:28:28Z"
+          },
+          "npm_and_yarn in /. for basic-ftp - Update #1317793242": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "aeb4546",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/24265478815",
+            "updated_at": "2026-04-10T21:42:47Z"
+          }
+        },
+        "skill_snapshot": {
+          "tokenUsage": {
+            "input": 2850466,
+            "month": "2026-04",
+            "output": 271711,
+            "cost_usd": 12.6271
+          }
+        }
+      }
+    }
+  },
+  "cross_cutting": {
+    "sibling_drift": [],
+    "study_plan_parity": [],
+    "study_plan_rpc": [],
+    "backup_get_rpc": [],
+    "dispatch_chain": [],
+    "ward_helper_pull_rpc": [],
+    "ward_helper_sync_wiring": [],
+    "honest_stats_parity": [],
+    "dispatch_pat_freshness": [],
+    "scheduler_health": []
+  }
+}
