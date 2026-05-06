@@ -1112,9 +1112,18 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
     """
     issues: list[dict[str, Any]] = []
     url = STUDY_PLAN_SUPABASE_URL.rstrip("/") + "/rest/v1/rpc/backup_get"
+    # Sentinel for "HTTP body did not decode as JSON". Distinguishable from
+    # None (the healthy SQL `null` return). Without this, a 200 response
+    # carrying an HTML error page or partial body would silently pass — the
+    # decode failure would collapse to None and the positive-case check
+    # `if parsed is not None` would treat it as the expected null result.
+    # Codex P2 review on PR #34 caught this.
+    _DECODE_FAILED = object()
 
     def _call(p_app: str, p_id: str) -> tuple[int, str, Any]:
-        """Returns (status, raw_body, parsed_json_or_None)."""
+        """Returns (status, raw_body, parsed). parsed is _DECODE_FAILED on
+        non-JSON 2xx bodies — caller must check `is _DECODE_FAILED` before
+        treating None as "healthy null"."""
         body = json.dumps({"p_app": p_app, "p_id": p_id}).encode("utf-8")
         req = urllib.request.Request(
             url,
@@ -1142,7 +1151,7 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
         try:
             parsed = json.loads(raw) if raw else None
         except json.JSONDecodeError:
-            parsed = None
+            parsed = _DECODE_FAILED
         return status, raw, parsed
 
     # ── Positive cases — one per whitelisted app ─────────────────────
@@ -1212,6 +1221,21 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
         # literal `null`. anything else means the sentinel id has been
         # written to that app's table, which is suspicious (probe-design
         # invariant: this id must never collide with a real backup).
+        if parsed is _DECODE_FAILED:
+            # 200 with a body that doesn't parse as JSON. Most likely cause:
+            # a proxy/CDN injecting an HTML error page in front of postgrest.
+            # Without this branch, the decode failure would collapse to None
+            # and pass the `parsed is not None` test below as healthy.
+            issues.append({
+                "severity": "warning",
+                "kind": "backup_get_rpc_decode_failure",
+                "msg": (
+                    f"backup_get(p_app='{app_key}') returned HTTP 200 with a "
+                    f"body that doesn't parse as JSON. Likely a proxy/CDN "
+                    f"injecting an HTML error page. Body: {raw[:120]!r}"
+                ),
+            })
+            continue
         if parsed is not None:
             issues.append({
                 "severity": "warning",
@@ -1249,6 +1273,28 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
                 f"the whitelist enforcement is gone. Any string matching "
                 f"`<app>_backups` could now be read. Re-deploy the function with "
                 f"the documented `IF p_app NOT IN (...)` guard."
+            ),
+        })
+        return issues
+
+    if 500 <= status < 600:
+        # 5xx on the negative case looks like the same regression as 200
+        # but surfacing through a different failure mode: the whitelist
+        # guard `IF p_app NOT IN (...)` was removed, so the function
+        # tried to look up `__auto_audit_invalid_app___backups`, which
+        # doesn't exist, and the dynamic table-name resolution explodes
+        # at server-side. Same security severity as a 200 (the whitelist
+        # is no longer enforced) — Codex P1 review on PR #34 escalated
+        # this from warning to critical for that reason.
+        issues.append({
+            "severity": "critical",
+            "kind": "backup_get_rpc_whitelist_5xx",
+            "msg": (
+                f"backup_get(p_app='__auto_audit_invalid_app__') returned "
+                f"HTTP {status}. Most likely cause: the `IF p_app NOT IN (...)` "
+                f"guard was removed and the function tried to read a "
+                f"non-existent table. Re-deploy the function with the "
+                f"documented guard. Body: {raw[:200]!r}"
             ),
         })
         return issues
