@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+# CI gate runs unit tests only — they're hermetic (no network, <100ms each).
+# The `*_dispatch.py` files are network-bound snapshot tests run manually
+# before publishing probe changes; see scripts/probes/test_*_dispatch.py
+# headers for cost and runbook.
+testpaths = ["scripts/probes"]
+python_files = ["test_*_unit.py"]
+addopts = "-q"
