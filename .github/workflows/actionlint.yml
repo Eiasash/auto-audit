@@ -30,10 +30,12 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/actionlint.yaml'
+  # PR trigger has no paths filter so this always runs on every PR — needed
+  # to satisfy the branch-protection required-check rule (a required check
+  # that never runs blocks merge indefinitely on the "expected" status).
+  # The job is fast (~15-30s) so always-on cost is negligible.
   pull_request:
-    paths:
-      - '.github/workflows/**'
-      - '.github/actionlint.yaml'
+    branches: [main]
 
 permissions:
   contents: read
