@@ -1,0 +1,42 @@
+# pytest — unit-test gate for the auto-audit probes.
+#
+# scripts/probes/ contains the deploy-verification and distractor-alignment
+# probes plus their hermetic unit tests (test_*_unit.py). The dispatch tests
+# (test_*_dispatch.py) hit the network and are NOT run here — they're
+# manual pre-merge snapshots (see file headers).
+#
+# Pytest config lives in pyproject.toml. Adding a new probe with a paired
+# test_<probe>_unit.py file is automatic — no workflow changes needed.
+
+name: pytest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/probes/**'
+      - 'pyproject.toml'
+      - '.github/workflows/pytest.yml'
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: Probe unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run unit tests
+        run: python -m pytest -v
