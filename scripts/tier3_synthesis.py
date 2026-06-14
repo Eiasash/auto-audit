@@ -70,10 +70,10 @@ RECURRING_FAILURE_THRESHOLD = 3
 # dependency-update runs (one workflow run per dependency per branch) which
 # create noise in the per-repo failure tally without representing signal.
 WORKFLOW_NOISE_PATTERNS = (
-    "npm_and_yarn in",      # Dependabot npm/yarn updates
-    "github_actions in",    # Dependabot GHA updates
-    "pip in",               # Dependabot pip updates
-    "Dependabot ",          # Catch-all Dependabot prefix
+    "npm_and_yarn in",  # Dependabot npm/yarn updates
+    "github_actions in",  # Dependabot GHA updates
+    "pip in",  # Dependabot pip updates
+    "Dependabot ",  # Catch-all Dependabot prefix
 )
 
 
@@ -98,6 +98,7 @@ KNOWN_FLAP_WORKFLOWS: dict[str, set[str]] = {
 def is_known_flap(repo_short: str, wf_name: str) -> bool:
     return wf_name in KNOWN_FLAP_WORKFLOWS.get(repo_short, set())
 
+
 # Open issue age escalation thresholds (days).
 ISSUE_AGE_WARN_DAYS = 14
 ISSUE_AGE_CRIT_DAYS = 30
@@ -111,10 +112,22 @@ DISPATCH_PAT_CRIT_DAYS = 90
 # Spend MTD hard threshold (matches spend_alarm.py).
 SPEND_MTD_HARD_USD = 400.0
 
+# Tier-1 monitor liveness. The health probe is scheduled every 30 min. If this
+# synthesis finds zero reports in its window, or the newest report is far older
+# than the probe interval, the monitor itself is down — and must self-alarm,
+# otherwise a dead probe lets Tier 3 report "Action needed: None" over no data
+# (a false-green that hides the outage). See health-check.yml.
+PROBE_STALE_HOURS = 6
+
 
 # ─── HTTP helpers ────────────────────────────────────────────────────────────
-def _http(method: str, url: str, headers: dict, body: Optional[bytes] = None,
-          timeout: int = 30) -> tuple[int, dict | str]:
+def _http(
+    method: str,
+    url: str,
+    headers: dict,
+    body: Optional[bytes] = None,
+    timeout: int = 30,
+) -> tuple[int, dict | str]:
     req = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -132,7 +145,9 @@ def _http(method: str, url: str, headers: dict, body: Optional[bytes] = None,
         return 0, {"_raw": str(e)}
 
 
-def gh(method: str, path: str, *, pat: str, body: Optional[dict] = None) -> tuple[int, Any]:
+def gh(
+    method: str, path: str, *, pat: str, body: Optional[dict] = None
+) -> tuple[int, Any]:
     headers = {
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {pat}",
@@ -194,7 +209,7 @@ def load_spend_snapshots(days: int, now: dt.datetime) -> list[dict]:
     for path in sorted(glob.glob("health-reports/spend-*.json")):
         base = os.path.basename(path)
         try:
-            day = dt.date.fromisoformat(base[len("spend-"):-len(".json")])
+            day = dt.date.fromisoformat(base[len("spend-") : -len(".json")])
         except ValueError:
             continue
         if day < cutoff:
@@ -264,11 +279,14 @@ def aggregate_cross_cutting(reports: list[dict]) -> dict[str, dict]:
         for probe, val in (rpt.get("cross_cutting") or {}).items():
             if not isinstance(val, list) or not val:
                 continue
-            slot = out.setdefault(probe, {
-                "firing_reports": 0,
-                "last_firing_at": "",
-                "last_messages": [],
-            })
+            slot = out.setdefault(
+                probe,
+                {
+                    "firing_reports": 0,
+                    "last_firing_at": "",
+                    "last_messages": [],
+                },
+            )
             slot["firing_reports"] += 1
             if gen > slot["last_firing_at"]:
                 slot["last_firing_at"] = gen
@@ -276,7 +294,11 @@ def aggregate_cross_cutting(reports: list[dict]) -> dict[str, dict]:
                 msgs = []
                 for item in val[:3]:
                     if isinstance(item, dict):
-                        msgs.append(item.get("message") or item.get("issue") or json.dumps(item)[:240])
+                        msgs.append(
+                            item.get("message")
+                            or item.get("issue")
+                            or json.dumps(item)[:240]
+                        )
                     else:
                         msgs.append(str(item)[:240])
                 slot["last_messages"] = msgs
@@ -319,7 +341,9 @@ def aggregate_spend(snaps: list[dict], now: dt.datetime) -> dict:
 
 
 # ─── GitHub API fetches ──────────────────────────────────────────────────────
-def fetch_recent_commits(repo: str, since: dt.datetime, pat: str, limit: int = 100) -> list[dict]:
+def fetch_recent_commits(
+    repo: str, since: dt.datetime, pat: str, limit: int = 100
+) -> list[dict]:
     since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     status, data = gh(
         "GET",
@@ -331,7 +355,9 @@ def fetch_recent_commits(repo: str, since: dt.datetime, pat: str, limit: int = 1
     return data
 
 
-def fetch_merged_prs(repo: str, since: dt.datetime, pat: str, limit: int = 100) -> list[dict]:
+def fetch_merged_prs(
+    repo: str, since: dt.datetime, pat: str, limit: int = 100
+) -> list[dict]:
     """Recently-closed PRs that were merged inside the window."""
     status, data = gh(
         "GET",
@@ -366,22 +392,75 @@ def fetch_open_issues(repo: str, label: str, pat: str) -> list[dict]:
 
 
 # ─── Detection ───────────────────────────────────────────────────────────────
-def detect_signals(per_repo: dict, cross_cutting: dict, spend: dict,
-                   open_self_issues: dict[str, list],
-                   open_target_issues: dict[str, list],
-                   now: dt.datetime) -> list[dict]:
+def detect_signals(
+    per_repo: dict,
+    cross_cutting: dict,
+    spend: dict,
+    open_self_issues: dict[str, list],
+    open_target_issues: dict[str, list],
+    now: dt.datetime,
+    reports: list[dict],
+    days: int,
+) -> list[dict]:
     """Compute the 'action needed' list. Each signal: severity / category / msg."""
     sigs: list[dict] = []
+
+    # ── Tier-1 monitor liveness (meta-check) ──────────────────────────────────
+    # The synthesis must never report "Action needed: None" when the probe that
+    # feeds it has stopped producing data. Surface a dead/stalled monitor first.
+    if not reports:
+        sigs.append(
+            {
+                "severity": "crit",
+                "category": "monitor-down",
+                "msg": (
+                    f"Tier 1 health probe produced **0 reports** in the last {days} days — "
+                    f"the suite monitor appears DOWN. Verify the 'Tier 1 — Health Check' "
+                    f"workflow is enabled and its report-commit push is landing "
+                    f"(see auto-audit health-check.yml)."
+                ),
+            }
+        )
+    else:
+        newest: Optional[dt.datetime] = None
+        for rpt in reports:
+            gen = rpt.get("generated_at")
+            if not gen:
+                continue
+            try:
+                gen_dt = dt.datetime.fromisoformat(gen.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if newest is None or gen_dt > newest:
+                newest = gen_dt
+        if newest is not None:
+            age_h = (now - newest).total_seconds() / 3600.0
+            if age_h > PROBE_STALE_HOURS:
+                sigs.append(
+                    {
+                        "severity": "crit",
+                        "category": "monitor-stale",
+                        "msg": (
+                            f"Newest Tier 1 health report is **{age_h:.1f}h old** "
+                            f"(probe is scheduled every 30 min). The monitor may be "
+                            f"stalled or its report-commit push blocked."
+                        ),
+                    }
+                )
 
     # Recurring cross-cutting probe firings
     for probe, info in cross_cutting.items():
         if info["firing_reports"] >= RECURRING_PROBE_THRESHOLD:
-            sigs.append({
-                "severity": "warn",
-                "category": "probe-recurring",
-                "msg": (f"Probe `{probe}` fired in {info['firing_reports']} reports this window. "
-                        f"Last: {info['last_firing_at']}."),
-            })
+            sigs.append(
+                {
+                    "severity": "warn",
+                    "category": "probe-recurring",
+                    "msg": (
+                        f"Probe `{probe}` fired in {info['firing_reports']} reports this window. "
+                        f"Last: {info['last_firing_at']}."
+                    ),
+                }
+            )
 
     # Recurring workflow failures (excluding known flaps that are documented elsewhere)
     for repo_name, slot in per_repo.items():
@@ -389,85 +468,115 @@ def detect_signals(per_repo: dict, cross_cutting: dict, spend: dict,
             if is_known_flap(repo_name, wf_name):
                 continue
             if len(shas) >= RECURRING_FAILURE_THRESHOLD:
-                sigs.append({
-                    "severity": "warn",
-                    "category": "workflow-streak",
-                    "msg": (f"`{repo_name}` / `{wf_name}` failed across "
-                            f"{len(shas)} distinct SHAs this window."),
-                })
+                sigs.append(
+                    {
+                        "severity": "warn",
+                        "category": "workflow-streak",
+                        "msg": (
+                            f"`{repo_name}` / `{wf_name}` failed across "
+                            f"{len(shas)} distinct SHAs this window."
+                        ),
+                    }
+                )
 
     # Spend trajectory
     if spend.get("available") and spend.get("projected_eom_usd") is not None:
         if spend["over_hard_threshold"]:
-            sigs.append({
-                "severity": "crit",
-                "category": "spend-projection",
-                "msg": (f"Projected end-of-month spend ${spend['projected_eom_usd']:.2f} > "
+            sigs.append(
+                {
+                    "severity": "crit",
+                    "category": "spend-projection",
+                    "msg": (
+                        f"Projected end-of-month spend ${spend['projected_eom_usd']:.2f} > "
                         f"hard threshold ${SPEND_MTD_HARD_USD:.0f}. "
-                        f"Drop emit effort dial high → medium."),
-            })
+                        f"Drop emit effort dial high → medium."
+                    ),
+                }
+            )
 
     # Aging open issues on auto-audit itself
     for label, issues in open_self_issues.items():
         for issue in issues:
             try:
                 created = dt.datetime.fromisoformat(
-                    issue["created_at"].replace("Z", "+00:00"))
+                    issue["created_at"].replace("Z", "+00:00")
+                )
             except (ValueError, KeyError):
                 continue
             age_days = (now - created).days
             if age_days >= ISSUE_AGE_CRIT_DAYS:
-                sigs.append({
-                    "severity": "crit",
-                    "category": "issue-aging",
-                    "msg": (f"`{label}` issue [#{issue['number']}]({issue['html_url']}) "
-                            f"open for {age_days} days: {issue['title']!s}"),
-                })
+                sigs.append(
+                    {
+                        "severity": "crit",
+                        "category": "issue-aging",
+                        "msg": (
+                            f"`{label}` issue [#{issue['number']}]({issue['html_url']}) "
+                            f"open for {age_days} days: {issue['title']!s}"
+                        ),
+                    }
+                )
             elif age_days >= ISSUE_AGE_WARN_DAYS:
-                sigs.append({
-                    "severity": "warn",
-                    "category": "issue-aging",
-                    "msg": (f"`{label}` issue [#{issue['number']}]({issue['html_url']}) "
-                            f"open for {age_days} days: {issue['title']!s}"),
-                })
+                sigs.append(
+                    {
+                        "severity": "warn",
+                        "category": "issue-aging",
+                        "msg": (
+                            f"`{label}` issue [#{issue['number']}]({issue['html_url']}) "
+                            f"open for {age_days} days: {issue['title']!s}"
+                        ),
+                    }
+                )
 
     # Open auto-audit findings on target repos that haven't auto-resolved
     for repo, issues in open_target_issues.items():
         for issue in issues:
             try:
                 created = dt.datetime.fromisoformat(
-                    issue["created_at"].replace("Z", "+00:00"))
+                    issue["created_at"].replace("Z", "+00:00")
+                )
             except (ValueError, KeyError):
                 continue
             age_days = (now - created).days
             if age_days >= ISSUE_AGE_WARN_DAYS:
-                sigs.append({
-                    "severity": "warn",
-                    "category": "target-issue-aging",
-                    "msg": (f"`{repo}` auto-audit finding "
+                sigs.append(
+                    {
+                        "severity": "warn",
+                        "category": "target-issue-aging",
+                        "msg": (
+                            f"`{repo}` auto-audit finding "
                             f"[#{issue['number']}]({issue['html_url']}) "
-                            f"open {age_days} days: {issue['title']!s}"),
-                })
+                            f"open {age_days} days: {issue['title']!s}"
+                        ),
+                    }
+                )
 
     # Dispatch PAT rotation deadline
     pat_age_days = (now.date() - DISPATCH_PAT_INSTALL).days
     if pat_age_days >= DISPATCH_PAT_CRIT_DAYS:
-        sigs.append({
-            "severity": "crit",
-            "category": "secret-rotation",
-            "msg": (f"`AUTO_AUDIT_DISPATCH_PAT` is {pat_age_days} days old "
+        sigs.append(
+            {
+                "severity": "crit",
+                "category": "secret-rotation",
+                "msg": (
+                    f"`AUTO_AUDIT_DISPATCH_PAT` is {pat_age_days} days old "
                     f"(installed {DISPATCH_PAT_INSTALL.isoformat()}). "
-                    f"Rotate via `scripts/rotate_dispatch_pat.py`."),
-        })
+                    f"Rotate via `scripts/rotate_dispatch_pat.py`."
+                ),
+            }
+        )
     elif pat_age_days >= DISPATCH_PAT_WARN_DAYS:
-        sigs.append({
-            "severity": "warn",
-            "category": "secret-rotation",
-            "msg": (f"`AUTO_AUDIT_DISPATCH_PAT` will hit the {DISPATCH_PAT_CRIT_DAYS}-day "
+        sigs.append(
+            {
+                "severity": "warn",
+                "category": "secret-rotation",
+                "msg": (
+                    f"`AUTO_AUDIT_DISPATCH_PAT` will hit the {DISPATCH_PAT_CRIT_DAYS}-day "
                     f"rotation deadline in {DISPATCH_PAT_CRIT_DAYS - pat_age_days} days. "
                     f"Plan: create a fine-grained PAT scoped to auto-audit + "
-                    f"run `scripts/rotate_dispatch_pat.py`."),
-        })
+                    f"run `scripts/rotate_dispatch_pat.py`."
+                ),
+            }
+        )
 
     return sigs
 
@@ -475,8 +584,10 @@ def detect_signals(per_repo: dict, cross_cutting: dict, spend: dict,
 # ─── Optional Claude narrative ───────────────────────────────────────────────
 def claude_narrative(facts_md: str, api_key: str) -> Optional[str]:
     if len(facts_md.encode("utf-8")) > NARRATIVE_PAYLOAD_CAP_BYTES:
-        print(f"::warning::Facts payload {len(facts_md)} bytes > "
-              f"{NARRATIVE_PAYLOAD_CAP_BYTES}; skipping narrative.")
+        print(
+            f"::warning::Facts payload {len(facts_md)} bytes > "
+            f"{NARRATIVE_PAYLOAD_CAP_BYTES}; skipping narrative."
+        )
         return None
 
     system = (
@@ -509,11 +620,14 @@ def claude_narrative(facts_md: str, api_key: str) -> Optional[str]:
     }
     status, data = _http("POST", ANTHROPIC_API, headers, body, timeout=60)
     if status != 200 or not isinstance(data, dict):
-        print(f"::warning::Claude narrative failed: HTTP {status}: "
-              f"{str(data)[:200]}")
+        print(
+            f"::warning::Claude narrative failed: HTTP {status}: " f"{str(data)[:200]}"
+        )
         return None
     blocks = data.get("content") or []
-    text = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+    text = "\n".join(
+        b.get("text", "") for b in blocks if b.get("type") == "text"
+    ).strip()
     return text or None
 
 
@@ -569,17 +683,22 @@ def fmt_per_repo(per_repo: dict, activity: dict) -> str:
                     sha_links = ", ".join(
                         f"[`{sha[:7]}`]({url})" for sha, url in list(shas.items())[:5]
                     )
-                    flap_marker = " _(known flap)_" if is_known_flap(repo_short, wf) else ""
+                    flap_marker = (
+                        " _(known flap)_" if is_known_flap(repo_short, wf) else ""
+                    )
                     lines.append(f"  - `{wf}` ({len(shas)}){flap_marker}: {sha_links}")
             if hidden:
                 hidden_total = sum(len(v) for _, v in hidden)
-                lines.append(f"  - _and {len(hidden)} more workflows "
-                             f"({hidden_total} additional failures)_")
+                lines.append(
+                    f"  - _and {len(hidden)} more workflows "
+                    f"({hidden_total} additional failures)_"
+                )
         if prs:
             lines.append("  - Recent merged PRs:")
             for pr in prs[:5]:
-                lines.append(f"    - [#{pr['number']}]({pr['html_url']}) "
-                             f"{pr['title']!s}")
+                lines.append(
+                    f"    - [#{pr['number']}]({pr['html_url']}) " f"{pr['title']!s}"
+                )
         lines.append("")
     return "\n".join(lines).rstrip()
 
@@ -590,8 +709,10 @@ def fmt_cross_cutting(cc: dict) -> str:
     rows = []
     for probe in sorted(cc, key=lambda p: -cc[p]["firing_reports"]):
         info = cc[probe]
-        rows.append(f"- `{probe}` — fired in **{info['firing_reports']}** reports "
-                    f"(last: {info['last_firing_at']})")
+        rows.append(
+            f"- `{probe}` — fired in **{info['firing_reports']}** reports "
+            f"(last: {info['last_firing_at']})"
+        )
         for m in info["last_messages"][:2]:
             short = m.replace("\n", " ").strip()[:240]
             rows.append(f"  - {short}")
@@ -613,7 +734,9 @@ def fmt_spend(spend: dict) -> str:
         parts.append(f"- Window delta: **+${spend['delta_usd']:.2f}**")
     if spend.get("projected_eom_usd") is not None:
         flag = " ⚠️" if spend["over_hard_threshold"] else ""
-        parts.append(f"- Projected end-of-month: **${spend['projected_eom_usd']:.2f}**{flag}")
+        parts.append(
+            f"- Projected end-of-month: **${spend['projected_eom_usd']:.2f}**{flag}"
+        )
     return "\n".join(parts)
 
 
@@ -643,17 +766,28 @@ def fmt_open_issues(open_self: dict[str, list], open_targets: dict[str, list]) -
     return "\n".join(lines)
 
 
-def build_markdown(now: dt.datetime, days: int, reports: list[dict],
-                   per_repo: dict, cross_cutting: dict, spend: dict,
-                   activity: dict, open_self: dict, open_targets: dict,
-                   signals: list[dict], narrative: Optional[str],
-                   prior_issue_url: Optional[str]) -> str:
+def build_markdown(
+    now: dt.datetime,
+    days: int,
+    reports: list[dict],
+    per_repo: dict,
+    cross_cutting: dict,
+    spend: dict,
+    activity: dict,
+    open_self: dict,
+    open_targets: dict,
+    signals: list[dict],
+    narrative: Optional[str],
+    prior_issue_url: Optional[str],
+) -> str:
     parts: list[str] = []
     iso_today = now.date().isoformat()
     parts.append(f"# Tier 3 — Weekly synthesis · {iso_today}")
     parts.append("")
-    parts.append(f"_Window: last {days} days · {len(reports)} health reports parsed · "
-                 f"generated {now.strftime('%Y-%m-%d %H:%MZ')}_")
+    parts.append(
+        f"_Window: last {days} days · {len(reports)} health reports parsed · "
+        f"generated {now.strftime('%Y-%m-%d %H:%MZ')}_"
+    )
     if prior_issue_url:
         parts.append("")
         parts.append(f"_Prior week: {prior_issue_url}_")
@@ -692,13 +826,16 @@ def build_markdown(now: dt.datetime, days: int, reports: list[dict],
 
     parts.append("---")
     parts.append("")
-    parts.append("_Auto-generated by `scripts/tier3_synthesis.py` "
-                 "([source](https://github.com/Eiasash/auto-audit/blob/main/scripts/tier3_synthesis.py))._")
+    parts.append(
+        "_Auto-generated by `scripts/tier3_synthesis.py` "
+        "([source](https://github.com/Eiasash/auto-audit/blob/main/scripts/tier3_synthesis.py))._"
+    )
     return "\n".join(parts)
 
 
-def build_facts_for_narrative(per_repo: dict, cross_cutting: dict, spend: dict,
-                              signals: list[dict]) -> str:
+def build_facts_for_narrative(
+    per_repo: dict, cross_cutting: dict, spend: dict, signals: list[dict]
+) -> str:
     """A compact factual digest fed to Claude for narrative synthesis."""
     parts = []
     parts.append("=== SIGNALS ===")
@@ -709,9 +846,13 @@ def build_facts_for_narrative(per_repo: dict, cross_cutting: dict, spend: dict,
         parts.append("(none)")
     parts.append("")
     parts.append("=== CROSS-CUTTING PROBES ===")
-    for probe, info in sorted(cross_cutting.items(), key=lambda x: -x[1]["firing_reports"]):
-        parts.append(f"- {probe}: {info['firing_reports']} firings; "
-                     f"last={info['last_firing_at']}")
+    for probe, info in sorted(
+        cross_cutting.items(), key=lambda x: -x[1]["firing_reports"]
+    ):
+        parts.append(
+            f"- {probe}: {info['firing_reports']} firings; "
+            f"last={info['last_firing_at']}"
+        )
     parts.append("")
     parts.append("=== PER REPO ===")
     for r, slot in per_repo.items():
@@ -719,16 +860,20 @@ def build_facts_for_narrative(per_repo: dict, cross_cutting: dict, spend: dict,
         for wf, shas in slot["workflow_failures"].items():
             if shas:
                 wf_lines.append(f"{wf}={len(shas)}")
-        parts.append(f"- {r}: live_sw={slot.get('last_live_sw')}; "
-                     f"bumps={len(slot['versions_seen'])}; "
-                     f"workflow_failures=[{', '.join(wf_lines) or 'none'}]; "
-                     f"emitted_issues={slot['critical_issues_emitted']}")
+        parts.append(
+            f"- {r}: live_sw={slot.get('last_live_sw')}; "
+            f"bumps={len(slot['versions_seen'])}; "
+            f"workflow_failures=[{', '.join(wf_lines) or 'none'}]; "
+            f"emitted_issues={slot['critical_issues_emitted']}"
+        )
     parts.append("")
     parts.append("=== SPEND ===")
     if spend.get("available"):
-        parts.append(f"- delta_usd={spend.get('delta_usd')}; "
-                     f"projected_eom={spend.get('projected_eom_usd')}; "
-                     f"over_hard_threshold={spend.get('over_hard_threshold')}")
+        parts.append(
+            f"- delta_usd={spend.get('delta_usd')}; "
+            f"projected_eom={spend.get('projected_eom_usd')}; "
+            f"over_hard_threshold={spend.get('over_hard_threshold')}"
+        )
     else:
         parts.append("- (no spend data)")
     return "\n".join(parts)
@@ -770,7 +915,11 @@ def find_prior_synthesis_issue(pat: str) -> Optional[str]:
 
 
 def open_issue(title: str, body: str, pat: str) -> Optional[str]:
-    payload = {"title": title, "body": body, "labels": ["tier3-synthesis", "auto-audit"]}
+    payload = {
+        "title": title,
+        "body": body,
+        "labels": ["tier3-synthesis", "auto-audit"],
+    }
     status, data = gh("POST", f"/repos/{REPO}/issues", pat=pat, body=payload)
     if status != 201 or not isinstance(data, dict):
         print(f"::warning::Failed to open issue: HTTP {status}: {str(data)[:200]}")
@@ -795,15 +944,27 @@ def comment_on_issue(issue_number: int, body: str, pat: str) -> Optional[str]:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     p.add_argument("--days", type=int, default=7, help="Lookback window in days")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Don't open/comment on any issue; print report to stdout")
-    p.add_argument("--no-narrative", action="store_true",
-                   help="Skip Claude narrative even if ANTHROPIC_API_KEY is set")
-    p.add_argument("--no-fetch-github", action="store_true",
-                   help="Skip all GitHub API calls (offline mode for local testing)")
-    p.add_argument("--out", default=None,
-                   help="Write report to this path (default: "
-                        "health-reports/synthesis-YYYY-MM-DD.md)")
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Don't open/comment on any issue; print report to stdout",
+    )
+    p.add_argument(
+        "--no-narrative",
+        action="store_true",
+        help="Skip Claude narrative even if ANTHROPIC_API_KEY is set",
+    )
+    p.add_argument(
+        "--no-fetch-github",
+        action="store_true",
+        help="Skip all GitHub API calls (offline mode for local testing)",
+    )
+    p.add_argument(
+        "--out",
+        default=None,
+        help="Write report to this path (default: "
+        "health-reports/synthesis-YYYY-MM-DD.md)",
+    )
     args = p.parse_args()
 
     now = dt.datetime.now(dt.timezone.utc)
@@ -811,7 +972,9 @@ def main() -> int:
     api_key = os.environ.get("ANTHROPIC_API_KEY")
 
     if not pat and not args.no_fetch_github:
-        print("::warning::No MONITOR_PAT/GITHUB_PAT set; running with --no-fetch-github implied")
+        print(
+            "::warning::No MONITOR_PAT/GITHUB_PAT set; running with --no-fetch-github implied"
+        )
         args.no_fetch_github = True
 
     print(f"Loading reports from last {args.days} days...")
@@ -840,7 +1003,12 @@ def main() -> int:
             activity[full] = {"commits": commits, "merged_prs": prs}
             print(f"  {full}: {len(commits)} commits, {len(prs)} merged PRs")
         # Open issues on auto-audit itself
-        for label in ("auto-audit", "spend-alarm", "rotation-reminder", "auto-fix-eligible"):
+        for label in (
+            "auto-audit",
+            "spend-alarm",
+            "rotation-reminder",
+            "auto-fix-eligible",
+        ):
             open_self[label] = fetch_open_issues(REPO, label, pat)
         # Open auto-audit-labeled issues on each watched repo
         for full in WATCHED_REPOS:
@@ -848,8 +1016,9 @@ def main() -> int:
         prior_issue_url = find_prior_synthesis_issue(pat)
         existing_open = find_existing_open_synthesis_issue(pat)
 
-    signals = detect_signals(per_repo, cross_cutting, spend, open_self,
-                             open_targets, now)
+    signals = detect_signals(
+        per_repo, cross_cutting, spend, open_self, open_targets, now, reports, args.days
+    )
 
     # Narrative
     narrative: Optional[str] = None
@@ -860,9 +1029,20 @@ def main() -> int:
         if narrative:
             print(f"  narrative: {len(narrative)} chars")
 
-    md = build_markdown(now, args.days, reports, per_repo, cross_cutting,
-                       spend, activity, open_self, open_targets, signals,
-                       narrative, prior_issue_url)
+    md = build_markdown(
+        now,
+        args.days,
+        reports,
+        per_repo,
+        cross_cutting,
+        spend,
+        activity,
+        open_self,
+        open_targets,
+        signals,
+        narrative,
+        prior_issue_url,
+    )
 
     # Always write the report file (audit trail)
     out_path = args.out or f"health-reports/synthesis-{now.date().isoformat()}.md"
