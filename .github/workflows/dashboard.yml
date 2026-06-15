@@ -40,6 +40,10 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
+          # Admin PAT so the dashboard commit push bypasses main's required
+          # status check (enforce_admins off). Default GITHUB_TOKEN is blocked
+          # by branch protection — see health-check.yml for the full rationale.
+          token: ${{ secrets.MONITOR_PAT }}
 
       - uses: actions/setup-python@v5
         with:

@@ -14,6 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Admin PAT so the spend snapshot push bypasses main's required
+          # status check (enforce_admins off). Default GITHUB_TOKEN is blocked
+          # by branch protection — see health-check.yml for the full rationale.
+          token: ${{ secrets.MONITOR_PAT }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
