@@ -257,7 +257,17 @@ def check_version_literal(
                 bundle_url = origin + bundle_path
                 bundle_body = _fetch_text(bundle_url)
                 needle = cfg["bundle_match"].format(version=expected)
-                if needle not in bundle_body:
+                # Vite minification may emit a quote-wrapped version literal
+                # with ANY JS string delimiter (", ', or `). When bundle_match
+                # wraps the version in quotes, accept all three delimiters so a
+                # backtick-minified bundle (IM/wa2) is not a false "missing
+                # literal" critical. Non-quote-wrapped needles (e.g. FM's
+                # q-v{version} hash suffix) keep exact-substring matching.
+                candidates = {needle}
+                if len(needle) >= 2 and needle[0] in "\"'`" and needle[-1] == needle[0]:
+                    inner = needle[1:-1]
+                    candidates = {q + inner + q for q in "\"'`"}
+                if not any(c in bundle_body for c in candidates):
                     failures.append(
                         f"Bundle `{bundle_path}` is missing literal `{needle}` "
                         f"(possibly tree-shaken or stale)"
