@@ -117,7 +117,10 @@ def render_md(app_key, app_meta, start, exam, hpw, weeks_arr, used, topics, ramp
     L.append("")
     L.append("| Rank | Topic | % of past Qs | Hours allocated |")
     L.append("|---|---|---|---|")
-    for rank, t in enumerate(topics, 1):
+    # Rank by frequency_pct, not file order: the canonical syllabus_data.json
+    # preserves a curated topic order (regen_derived.cjs treats order as opaque),
+    # so enumerating `topics` directly would misstate the high-yield ranking.
+    for rank, t in enumerate(sorted(topics, key=lambda t: -t["frequency_pct"]), 1):
         L.append(f"| {rank} | {t['en']} | {t['frequency_pct']}% | {t['hours']}h |")
     L.append("")
     for i, week in enumerate(weeks_arr):
