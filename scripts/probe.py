@@ -107,6 +107,8 @@ REPO_CONFIG: dict[str, dict[str, Any]] = {
     "watch-advisor2": {
         "live_url":   "https://watch-advisor2.netlify.app",
         "snapshot_url": "https://watch-advisor2.netlify.app/.netlify/functions/skill-snapshot",
+        # skill-snapshot requires a Bearer token by design — a 401 means "up + auth-gated", not down.
+        "snapshot_auth_gated": True,
         "version_files": [],
         "shared_engine_files": [],
     },
@@ -573,17 +575,24 @@ def probe_deploy_drift(repo: str, cfg: dict[str, Any], versions: dict[str, str |
     return issues
 
 
-def probe_endpoint(name: str, url: str) -> dict[str, Any]:
+def probe_endpoint(name: str, url: str, auth_gated: bool = False) -> dict[str, Any]:
     """Generic endpoint probe — for Toranot self-audit / skill-snapshot."""
     if not url:
         return {}
     status, data = _http_json(url)
     out: dict[str, Any] = {"http": status, "ok": status == 200, "issues": []}
     if status != 200:
-        out["issues"].append({
-            "severity": "warning", "kind": f"{name}_endpoint_unhealthy",
-            "msg": f"{url} → HTTP {status}",
-        })
+        # An auth-gated endpoint returning 401/403 is UP and correctly rejecting an
+        # unauthenticated probe — not a health failure (a real outage is 5xx/timeout/
+        # connection-refused). Treat it as ok-but-gated instead of flagging noise.
+        if auth_gated and status in (401, 403):
+            out["ok"] = True
+            out["auth_gated"] = True
+        else:
+            out["issues"].append({
+                "severity": "warning", "kind": f"{name}_endpoint_unhealthy",
+                "msg": f"{url} → HTTP {status}",
+            })
     elif isinstance(data, dict):
         # Surface a few well-known fields if present
         if data.get("status") and data["status"] != "HEALTHY":
@@ -2431,7 +2440,7 @@ def run() -> dict[str, Any]:
                 repo_report["raw"]["self_audit"] = ep.get("snapshot", ep)
                 repo_report["issues"].extend(ep.get("issues", []))
         if cfg.get("snapshot_url"):
-            ep = probe_endpoint(repo + ".skill-snapshot", cfg["snapshot_url"])
+            ep = probe_endpoint(repo + ".skill-snapshot", cfg["snapshot_url"], auth_gated=cfg.get("snapshot_auth_gated", False))
             if ep:
                 repo_report["raw"]["skill_snapshot"] = ep.get("snapshot", ep)
                 repo_report["issues"].extend(ep.get("issues", []))
