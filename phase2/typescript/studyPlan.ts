@@ -145,9 +145,13 @@ export function schedule(
   for (const topic of sortedTopics) {
     let placed = false;
 
-    // Try to place in first available week
+    // Try to place in first available week.
+    // + 1e-9 float tolerance: keeps parity with the Python reference
+    // (scripts/generate_study_plan.py) and study_plan/algorithm.js — without it
+    // a topic that fits exactly can land ~1e-15 above weeklyBudget+0.5 and get
+    // wrongly deferred, diverging week contents/used[] on boundary syllabus data.
     for (let i = 0; i < weeks; i++) {
-      if (used[i] + topic.hours <= weeklyBudget + 0.5) {
+      if (used[i] + topic.hours <= weeklyBudget + 0.5 + 1e-9) {
         weeksArr[i].push(topic);
         used[i] += topic.hours;
         placed = true;

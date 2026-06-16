@@ -9,6 +9,22 @@ Run periodically (after big question additions, or after curating new
 topic names in topic_names.json) to keep the study plan generator's
 weights and display names current.
 
+⚠️ NOT a drop-in canonical generator. The CANONICAL syllabus_data.json is the
+copy regen-gated in Geriatrics (data/syllabus_data.json via regen_derived.cjs),
+which the 3 PWAs ship byte-identically and the probe checks for drift. This
+from-scratch regenerator differs from it in two ways the study-plan algorithm
+ignores but byte-identity does not:
+  * topic ORDER — this script sorts by -n_questions (line ~end of
+    build_topic_records); the canonical preserves a curated id-ish order that
+    regen_derived treats as opaque.
+  * weight — this script recomputes weight = n/(total/len); regen_derived
+    PRESERVES the existing (frozen, opaque) weight and never recomputes it.
+    The algorithm allocates by frequency_pct, not weight, so this is cosmetic —
+    but it means re-running this script and committing the output WILL diverge
+    the file from the canonical and re-trip the drift probe.
+Use it to refresh display names / spot count drift; to actually re-sync the
+PWAs, copy Geri's regen-gated data/syllabus_data.json, don't commit this output.
+
 Env:
     GITHUB_PAT — read access to Eiasash/{Geriatrics, InternalMedicine, FamilyMedicine}
 
@@ -28,8 +44,8 @@ from collections import Counter
 
 GH_API = "https://api.github.com"
 APPS = {
-    "Geri":      "Geriatrics",
-    "Pnimit":    "InternalMedicine",
+    "Geri": "Geriatrics",
+    "Pnimit": "InternalMedicine",
     "Mishpacha": "FamilyMedicine",
 }
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -91,10 +107,15 @@ def build_topic_records(label, topics_raw, questions_raw, overlay):
             keywords = list(t)
 
         n = counter.get(i, 0)
-        records.append({
-            "id": i, "en": name_en, "he": name_he,
-            "keywords": keywords, "n_questions": n,
-        })
+        records.append(
+            {
+                "id": i,
+                "en": name_en,
+                "he": name_he,
+                "keywords": keywords,
+                "n_questions": n,
+            }
+        )
 
     total = sum(r["n_questions"] for r in records)
     if total == 0:
@@ -121,8 +142,10 @@ def main():
 
     overlay = load_overlay()
     if overlay:
-        print(f"  loaded overlay: {sum(len(v) for v in overlay.values())} curated names "
-              f"across {list(overlay.keys())}")
+        print(
+            f"  loaded overlay: {sum(len(v) for v in overlay.values())} curated names "
+            f"across {list(overlay.keys())}"
+        )
     else:
         print("  no overlay file — Geri/Pnimit will use keyword-derived fallback names")
 
