@@ -1,0 +1,336 @@
+{
+  "generated_at": "2026-07-06T12:18:58.364725+00:00",
+  "tool": "auto-audit Tier 1 monitor",
+  "repos": {
+    "Geriatrics": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "10.64.186",
+          "shlav-a-mega.html": "10.64.186"
+        },
+        "live_sw_version": "10.64.186",
+        "workflows": {
+          "Distractor Branch \u2192 Main (Auto-PR)": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ea3ed5f",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/28781219366",
+            "updated_at": "2026-07-06T09:21:08Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "ea3ed5f",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/28771377915",
+            "updated_at": "2026-07-06T06:06:37Z"
+          },
+          "Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ea3ed5f",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/28732741378",
+            "updated_at": "2026-07-05T07:04:33Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ea3ed5f",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/28511046734",
+            "updated_at": "2026-07-01T10:29:40Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ea3ed5f",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/28511046726",
+            "updated_at": "2026-07-01T10:29:38Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ea3ed5f",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/28511046774",
+            "updated_at": "2026-07-01T10:29:59Z"
+          },
+          "pages build and deployment": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "ea3ed5f",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/28511045814",
+            "updated_at": "2026-07-01T10:30:13Z"
+          }
+        }
+      }
+    },
+    "InternalMedicine": {
+      "issues": [
+        {
+          "severity": "critical",
+          "kind": "canonical-fabrication",
+          "msg": "Pnimit canonical fabrication: 2/5 sampled deployed questions have no canonical match",
+          "body": "**2 of 5 sampled questions have stems that do NOT appear in any canonical file under `scripts/exam_audit/canonical/` on `main`.**\n\nCanonical corpus: 648 unique stems across 7 session files.\nDeployed corpus: 1556 questions.\n\n**What this means:** the deployed bundle contains question text that doesn't match any source-of-truth canonical record. This is the v9.81 idx 510 fabrication class \u2014 option text and explanations can be fabricated, but a fabricated *stem* means the whole record is suspect.\n\n**This is NOT auto-fixable.** Fabrication requires a human re-extract from the source PDF; mechanical regeneration cannot restore truth that was never there. The fix path: locate the original exam-session PDF, re-run `scripts/exam_audit/parse_questions.py` for that session, diff against the deployed copy, and reconcile in a human-reviewed PR.\n\n**Diverging samples:**\n```json\n[\n  {\n    \"idx\": 1496,\n    \"t\": \"2020\",\n    \"deployed_q\": \"\u05d1\u05de\u05d9 \u05ea\u05e6\u05e4\u05d5 \u05dc\u05de\u05e6\u05d5\u05d0 \u05d4\u05d9\u05e4\u05d5\u05e0\u05ea\u05e8\u05de\u05d9\u05d4 500 \u05de\u05d0\\\"\u05e7/\u05dc, \u05e2\u05dd \u05d0\u05d5\u05e1\u05de\u05d5\u05dc\u05dc\u05d9\u05d5\u05ea \u05e1\u05e8\u05d5\u05dd 250 \u05de\u05d0\u05d5\u05e1\u05de/\u05dc, \u05d1\u05e9\u05ea\u05df \u05d0\u05d5\u05e1\u05de\u05d5\u05dc\u05dc\u05d9\u05d5\u05ea 165 \u05de\u05d0\u05d5\u05e1\u05de/\u05dc \u05d5\u05e0\u05ea\u05e8\u05df \u05d1\u05e9\u05ea\u05df 60 \u05de\u05d0\\\"\u05e7/\u05dc?\",\n    \"stem_len\": 119\n  },\n  {\n    \"idx\": 198,\n    \"t\": \"2021-Jun\",\n    \"deployed_q\": \"\u05d1\u05ea 67, \u05e9\u05d1\u05d1\u05d3\u05d9\u05e7\u05d5\u05ea \u05de\u05e2\u05d1\u05d3\u05d4 \u05e0\u05de\u05e6\u05d0\u05d5 \u05d4\u05d9\u05e4\u05e8\u05d2\u05dc\u05d5\u05d1\u05d5\u05dc\u05d9\u05e0\u05de\u05d9\u05d4, \u05d4\u05de\u05d5\u05d2\u05dc\u05d5\u05d1\u05d9\u05df 14 \u05d2\u05e8'/\u05d3\u05f4\u05dc \u05e1\u05e4\u05d9\u05e8\u05d4 \u05dc\u05d1\u05e0\u05d4 \u05d5\u05d8\u05e1\u05d9\u05d5\u05ea \u05ea\u05e7\u05d9\u05e0\u05d9\u05dd. \u05e1\u05d9\u05d3\u05df \u05d5\u05ea\u05e4\u05e7\u05d5\u05d3\u05d9 \u05db\u05dc\u05d9\u05d4 \u05ea\u05e7\u05d9\u05e0\u05d9\u05dd, \u05d5\u05d1\u05d0\u05dc\u05e7\u05d8\u05e8\u05d5\u05e4\u05d5\u05e8\u05d6\u05d4 \u05e9\u05dc \u05d7\u05dc\u05d1\u05d5\u05e0\u05d9 \u05d4\u05e0\u05e1\u05d9\u05d5\u05d1 \u05de\u05e7\u05d8\u05e2 \u05de\u05d5\u05e0\u05d5\u05e7\u05dc\u05d5\u05e0\u05dc\u05d9 \u05de\u05e1\u05d5\u05d2 IgG (0.7 \u05d2\u05e8'/\u05d3\u05f4\u05dc). \u05d9\u05d7\u05e1 \u05e9\u05e8\u05e9\u05e8\u05d0\u05d5\u05ea \u05e7\u05dc\u05d5\u05ea \u05d7\u05d5\u05e4\u05e9\u05d9\u05d5\u05ea 5.6, \u05d1\u05e0\u05e1 \u05d2'\u05d5\u05e0\u05e1 \u05e9\u05dc\u05d9\u05dc\u05d9. \u05d0\u05d9\u05df \",\n    \"stem_len\": 277\n  }\n]\n```",
+          "labels": [
+            "auto-audit",
+            "content-fabrication"
+          ],
+          "url": "https://github.com/Eiasash/InternalMedicine/tree/main/scripts/exam_audit/canonical"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "src/core/constants.js": "10.4.57",
+          "sw.js": "10.4.57"
+        },
+        "live_sw_version": "10.4.57",
+        "workflows": {
+          "Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "97328aa",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/28732795383",
+            "updated_at": "2026-07-05T07:04:08Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "97328aa",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/28497957280",
+            "updated_at": "2026-07-01T06:23:06Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "97328aa",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/27630416192",
+            "updated_at": "2026-06-16T15:55:09Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "97328aa",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/27630414875",
+            "updated_at": "2026-06-16T15:55:09Z"
+          },
+          "Deploy to GitHub Pages": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "97328aa",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/27630414926",
+            "updated_at": "2026-06-16T15:55:33Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "97328aa",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/27630414198",
+            "updated_at": "2026-06-16T15:55:17Z"
+          }
+        }
+      }
+    },
+    "FamilyMedicine": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "1.26.17",
+          "src/core/constants.js": "1.26.17",
+          "sw.js": "1.26.17"
+        },
+        "live_sw_version": "1.26.17",
+        "workflows": {
+          "Distractor Autopsy Generator": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "42f3111",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/28788376423",
+            "updated_at": "2026-07-06T11:31:28Z"
+          },
+          "Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "42f3111",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/28733032824",
+            "updated_at": "2026-07-05T07:14:38Z"
+          }
+        }
+      }
+    },
+    "ward-helper": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "1.46.31"
+        },
+        "live_sw_version": "1.46.31",
+        "workflows": {
+          "audit-fix-deploy": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "2bd3c64",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/28732838254",
+            "updated_at": "2026-07-05T07:07:12Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "2bd3c64",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/28513875864",
+            "updated_at": "2026-07-01T11:22:12Z"
+          },
+          "Deploy to GitHub Pages": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "2bd3c64",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/28513875709",
+            "updated_at": "2026-07-01T11:23:24Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "2bd3c64",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/28513875898",
+            "updated_at": "2026-07-01T11:23:40Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "e6ab8ce",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/28486580746",
+            "updated_at": "2026-07-01T01:12:25Z"
+          }
+        }
+      }
+    },
+    "Toranot": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "Toranot.skill-snapshot_recent_errors",
+          "msg": "4 recent errors"
+        }
+      ],
+      "raw": {
+        "workflows": {
+          "RLS sanity pass (shared krmlzwwelqvlfslwltol)": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "18badb8",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/28778718754",
+            "updated_at": "2026-07-06T08:36:55Z"
+          },
+          "Toranot Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "18badb8",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/28772593919",
+            "updated_at": "2026-07-06T06:34:12Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "18badb8",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/28497959523",
+            "updated_at": "2026-07-01T06:23:00Z"
+          },
+          "Netlify Deploy Monitor": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "18badb8",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/27468274876",
+            "updated_at": "2026-06-13T13:36:20Z"
+          },
+          "CI / Deploy": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "18badb8",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/27468274870",
+            "updated_at": "2026-06-13T13:36:49Z"
+          }
+        },
+        "self_audit": {
+          "status": "HEALTHY"
+        },
+        "skill_snapshot": {
+          "patientCount": 0,
+          "tokenUsage": {
+            "currentMonth": "2026-07",
+            "currentMonthTotals": {
+              "input_tokens": 8693,
+              "output_tokens": 2172,
+              "call_count": 13
+            },
+            "allTimeTotals": {
+              "input_tokens": 143062450,
+              "output_tokens": 25966220,
+              "call_count": 80524
+            }
+          },
+          "claudeModel": "claude-sonnet-4-6",
+          "recentErrorCount": 4
+        }
+      }
+    },
+    "watch-advisor2": {
+      "issues": [],
+      "raw": {
+        "workflows": {
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "f3857a7",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/28570019389",
+            "updated_at": "2026-07-02T06:24:30Z"
+          },
+          "npm_and_yarn in /. for undici - Update #1424912831": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "3a1a960",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/27868039338",
+            "updated_at": "2026-06-20T10:13:38Z"
+          },
+          "Test": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "3a1a960",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/27626381481",
+            "updated_at": "2026-06-16T14:53:24Z"
+          }
+        },
+        "skill_snapshot": {
+          "http": 401,
+          "ok": true,
+          "issues": [],
+          "auth_gated": true
+        }
+      }
+    }
+  },
+  "cross_cutting": {
+    "sibling_drift": [],
+    "study_plan_parity": [],
+    "study_plan_rpc": [],
+    "backup_get_rpc": [],
+    "tier2_health": [],
+    "dispatch_chain": [],
+    "ward_helper_pull_rpc": [],
+    "ward_helper_sync_wiring": [],
+    "feedback_queue": [
+      {
+        "severity": "warning",
+        "kind": "feedback_queue_fetch_error",
+        "msg": "feedback_queue: failed to query mishpacha_feedback (HTTP 400)"
+      }
+    ],
+    "honest_stats_parity": [],
+    "dispatch_pat_freshness": [],
+    "scheduler_health": [
+      {
+        "severity": "warning",
+        "kind": "scheduler-drift",
+        "msg": "GHA scheduler dropped ticks: previous Tier 1 schedule run was 104 min ago (expected \u2264 30). Repository_dispatch path (issue #14) is the durable fix \u2014 verify AUTO_AUDIT_DISPATCH_PAT is set in all 4 watched repos.",
+        "url": "https://github.com/Eiasash/auto-audit/actions/workflows/health-check.yml"
+      }
+    ]
+  }
+}
