@@ -1,0 +1,227 @@
+{
+  "generated_at": "2026-07-16T22:48:38.985334+00:00",
+  "tool": "auto-audit Tier 1 monitor",
+  "repos": {
+    "Geriatrics": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflows_unreadable",
+          "msg": "GH Actions API HTTP 503"
+        },
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Notify auto-audit (notify-auto-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/Geriatrics/actions/runs/29424710997. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/Geriatrics/actions/runs/29424710997"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "package.json": "10.64.191",
+          "shlav-a-mega.html": "10.64.191"
+        },
+        "live_sw_version": "10.64.191",
+        "workflows": {}
+      }
+    },
+    "InternalMedicine": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflows_unreadable",
+          "msg": "GH Actions API HTTP 503"
+        },
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Notify auto-audit (notify-auto-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/InternalMedicine/actions/runs/29423568040. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/29423568040"
+        },
+        {
+          "severity": "warning",
+          "kind": "canonical-fabrication",
+          "msg": "Pnimit deployed bundle has unrecognized `t` value(s): ['2026-Jun']",
+          "body": "`data/questions.json` on the live deploy contains 1 `t` value(s) not declared in this probe's `CANONICAL_SESSION_TAGS` or `NON_CANONICAL_TAGS`: ['2026-Jun'].\n\nDecide handling before this accumulates silently:\n- New exam session \u2192 add tag to `CANONICAL_SESSION_TAGS` AND create the matching canonical file under `scripts/exam_audit/canonical/`.\n- New non-canonical source (textbook, AI model, etc.) \u2192 add to `NON_CANONICAL_TAGS` so the sampler skips it correctly.\n\nSample-eligible this run: 947/1706 questions. Unknown-tag questions are excluded from sampling.",
+          "labels": [
+            "auto-audit"
+          ],
+          "url": "https://github.com/Eiasash/InternalMedicine/tree/main/scripts/exam_audit/canonical"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "src/core/constants.js": "10.4.59",
+          "sw.js": "10.4.59"
+        },
+        "live_sw_version": "10.4.59",
+        "workflows": {}
+      }
+    },
+    "FamilyMedicine": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflows_unreadable",
+          "msg": "GH Actions API HTTP 503"
+        },
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Notify auto-audit (notify-auto-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/FamilyMedicine/actions/runs/29424018893. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/29424018893"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "package.json": "1.26.19",
+          "src/core/constants.js": "1.26.19",
+          "sw.js": "1.26.19"
+        },
+        "live_sw_version": "1.26.19",
+        "workflows": {}
+      }
+    },
+    "ward-helper": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflows_unreadable",
+          "msg": "GH Actions API HTTP 503"
+        },
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Notify auto-audit (notify-auto-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/ward-helper/actions/runs/29422833627. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/ward-helper/actions/runs/29422833627"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "package.json": "1.46.32"
+        },
+        "live_sw_version": "1.46.32",
+        "workflows": {}
+      }
+    },
+    "Toranot": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflows_unreadable",
+          "msg": "GH Actions API HTTP 503"
+        },
+        {
+          "severity": "warning",
+          "kind": "Toranot.skill-snapshot_recent_errors",
+          "msg": "4 recent errors"
+        }
+      ],
+      "raw": {
+        "workflows": {},
+        "self_audit": {
+          "status": "HEALTHY"
+        },
+        "skill_snapshot": {
+          "patientCount": 0,
+          "tokenUsage": {
+            "currentMonth": "2026-07",
+            "currentMonthTotals": {
+              "input_tokens": 14082,
+              "output_tokens": 4766,
+              "call_count": 27
+            },
+            "allTimeTotals": {
+              "input_tokens": 143067839,
+              "output_tokens": 25968814,
+              "call_count": 80538
+            }
+          },
+          "claudeModel": "claude-sonnet-4-6",
+          "recentErrorCount": 4
+        }
+      }
+    },
+    "watch-advisor2": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflows_unreadable",
+          "msg": "GH Actions API HTTP 503"
+        }
+      ],
+      "raw": {
+        "workflows": {},
+        "skill_snapshot": {
+          "http": 401,
+          "ok": true,
+          "issues": [],
+          "auth_gated": true
+        }
+      }
+    }
+  },
+  "cross_cutting": {
+    "sibling_drift": [],
+    "study_plan_parity": [
+      {
+        "severity": "warning",
+        "kind": "study_plan_syllabus_drift",
+        "msg": "syllabus_data.json differs across the three medical PWAs: {'FamilyMedicine': '2b295d1317ad', 'InternalMedicine': '2b295d1317ad', 'Geriatrics': '8165cacec81b'}",
+        "auto_fix": "sibling_sync_syllabus"
+      }
+    ],
+    "study_plan_rpc": [],
+    "backup_get_rpc": [],
+    "tier2_health": [],
+    "dispatch_chain": [
+      {
+        "severity": "critical",
+        "kind": "dispatch_chain_run_failed",
+        "msg": "Geriatrics: most recent notify-auto-audit run FAILED (sha b04ff615, 2026-07-15T14:41:50Z). Most likely cause: AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the Actions:write scope on Eiasash/auto-audit. Push-to-probe SLA is broken; cron failsafe still runs every 30 min. Fix: rotate the PAT \u2014 see scripts/DISPATCH_PAT_ROTATION.md. Run: https://github.com/Eiasash/Geriatrics/actions/runs/29424710997"
+      },
+      {
+        "severity": "critical",
+        "kind": "dispatch_chain_run_failed",
+        "msg": "InternalMedicine: most recent notify-auto-audit run FAILED (sha a91b20a1, 2026-07-15T14:26:38Z). Most likely cause: AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the Actions:write scope on Eiasash/auto-audit. Push-to-probe SLA is broken; cron failsafe still runs every 30 min. Fix: rotate the PAT \u2014 see scripts/DISPATCH_PAT_ROTATION.md. Run: https://github.com/Eiasash/InternalMedicine/actions/runs/29423568040"
+      },
+      {
+        "severity": "critical",
+        "kind": "dispatch_chain_run_failed",
+        "msg": "FamilyMedicine: most recent notify-auto-audit run FAILED (sha 37723ea3, 2026-07-15T14:32:41Z). Most likely cause: AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the Actions:write scope on Eiasash/auto-audit. Push-to-probe SLA is broken; cron failsafe still runs every 30 min. Fix: rotate the PAT \u2014 see scripts/DISPATCH_PAT_ROTATION.md. Run: https://github.com/Eiasash/FamilyMedicine/actions/runs/29424018893"
+      },
+      {
+        "severity": "critical",
+        "kind": "dispatch_chain_run_failed",
+        "msg": "ward-helper: most recent notify-auto-audit run FAILED (sha d8b5bf0c, 2026-07-15T14:16:38Z). Most likely cause: AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the Actions:write scope on Eiasash/auto-audit. Push-to-probe SLA is broken; cron failsafe still runs every 30 min. Fix: rotate the PAT \u2014 see scripts/DISPATCH_PAT_ROTATION.md. Run: https://github.com/Eiasash/ward-helper/actions/runs/29422833627"
+      }
+    ],
+    "ward_helper_pull_rpc": [],
+    "ward_helper_sync_wiring": [],
+    "feedback_queue": [],
+    "honest_stats_parity": [],
+    "dispatch_pat_freshness": [
+      {
+        "severity": "warning",
+        "kind": "dispatch_pat_aging",
+        "msg": "Geriatrics: AUTO_AUDIT_DISPATCH_PAT last rotated 78 days ago (2026-04-29T09:09:39Z). Approaching the 90-day rotation cadence \u2014 plan to rotate within 12 days per scripts/DISPATCH_PAT_ROTATION.md."
+      },
+      {
+        "severity": "warning",
+        "kind": "dispatch_pat_aging",
+        "msg": "InternalMedicine: AUTO_AUDIT_DISPATCH_PAT last rotated 78 days ago (2026-04-29T09:09:39Z). Approaching the 90-day rotation cadence \u2014 plan to rotate within 12 days per scripts/DISPATCH_PAT_ROTATION.md."
+      },
+      {
+        "severity": "warning",
+        "kind": "dispatch_pat_aging",
+        "msg": "FamilyMedicine: AUTO_AUDIT_DISPATCH_PAT last rotated 78 days ago (2026-04-29T09:09:40Z). Approaching the 90-day rotation cadence \u2014 plan to rotate within 12 days per scripts/DISPATCH_PAT_ROTATION.md."
+      },
+      {
+        "severity": "warning",
+        "kind": "dispatch_pat_aging",
+        "msg": "ward-helper: AUTO_AUDIT_DISPATCH_PAT last rotated 78 days ago (2026-04-29T09:09:40Z). Approaching the 90-day rotation cadence \u2014 plan to rotate within 12 days per scripts/DISPATCH_PAT_ROTATION.md."
+      }
+    ],
+    "scheduler_health": []
+  }
+}
