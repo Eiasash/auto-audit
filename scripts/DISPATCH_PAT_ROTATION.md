@@ -26,8 +26,10 @@ That token lives in each watched repo as the `AUTO_AUDIT_DISPATCH_PAT` secret.
 - Resource owner: **Eiasash**
 - Repository access: **Only select repositories → Eiasash/auto-audit**
 - Repository permissions:
-  - **Contents: Read-only**
-  - **Actions: Read and write** (required for `repository_dispatch`)
+  - **Contents: Read and write** (required for `repository_dispatch`: with
+    Read-only the dispatch fails "Resource not accessible by personal access
+    token" — verified 2026-09-29)
+  - **Actions: Read and write**
 - Expiration: **90 days** (set a calendar reminder for next rotation)
 
 ### 2. Run the rotation script

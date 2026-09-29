@@ -70,9 +70,6 @@ from typing import Optional
 # ─── Defaults ────────────────────────────────────────────────────────────────
 DEFAULT_REPOS = [
     "Eiasash/Geriatrics",
-    "Eiasash/InternalMedicine",
-    "Eiasash/FamilyMedicine",
-    "Eiasash/ward-helper",
 ]
 DEFAULT_SECRET_NAME = "AUTO_AUDIT_DISPATCH_PAT"
 GITHUB_API = "https://api.github.com"

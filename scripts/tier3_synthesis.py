@@ -46,11 +46,7 @@ from typing import Any, Optional
 REPO = "Eiasash/auto-audit"
 WATCHED_REPOS = [
     "Eiasash/Geriatrics",
-    "Eiasash/InternalMedicine",
-    "Eiasash/FamilyMedicine",
-    "Eiasash/ward-helper",
     "Eiasash/Toranot",
-    "Eiasash/watch-advisor2",
 ]
 GITHUB_API = "https://api.github.com"
 ANTHROPIC_API = "https://api.anthropic.com/v1/messages"
