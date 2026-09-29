@@ -52,11 +52,7 @@ from typing import Any
 
 REPO_ORDER = [
     "Geriatrics",
-    "InternalMedicine",
-    "FamilyMedicine",
     "Toranot",
-    "ward-helper",
-    "watch-advisor2",
 ]
 
 REPO_LIVE_URLS = {

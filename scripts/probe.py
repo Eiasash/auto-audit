@@ -47,6 +47,8 @@ from probes.probe_deploy_verification import (
 
 OWNER = "Eiasash"
 
+# Retired 2026-09-29 (Eias no longer uses them): InternalMedicine, FamilyMedicine,
+# ward-helper, watch-advisor2. Restore their entries from git history to re-watch.
 REPO_CONFIG: dict[str, dict[str, Any]] = {
     "Geriatrics": {
         "live_url": "https://eiasash.github.io/Geriatrics/",
@@ -60,42 +62,6 @@ REPO_CONFIG: dict[str, dict[str, Any]] = {
         "deploy_workflow": "Deploy to GitHub Pages",
         "ci_workflow": "CI",
     },
-    "InternalMedicine": {
-        "live_url": "https://eiasash.github.io/InternalMedicine/",
-        "sw_url":   "https://eiasash.github.io/InternalMedicine/sw.js",
-        "sw_re":    r"CACHE\s*=\s*'pnimit-v([^']+)'",
-        "version_files": [
-            ("src/core/constants.js", r"APP_VERSION\s*=\s*'([^']+)'"),
-            ("sw.js",                 r"CACHE\s*=\s*'pnimit-v([^']+)'"),
-        ],
-        "shared_engine_files": ["shared/fsrs.js", "harrison_chapters.json", "drugs.json"],
-        "deploy_workflow": "Deploy to GitHub Pages",
-        "ci_workflow": "CI",
-    },
-    "FamilyMedicine": {
-        "live_url": "https://eiasash.github.io/FamilyMedicine/",
-        "sw_url":   "https://eiasash.github.io/FamilyMedicine/sw.js",
-        "sw_re":    r"CACHE\s*=\s*'mishpacha-v([^']+)'",
-        "version_files": [
-            ("package.json",          r'"version"\s*:\s*"([^"]+)"'),
-            ("src/core/constants.js", r"APP_VERSION\s*=\s*'([^']+)'"),
-            ("sw.js",                 r"CACHE\s*=\s*'mishpacha-v([^']+)'"),
-        ],
-        "shared_engine_files": ["shared/fsrs.js", "harrison_chapters.json"],
-        "deploy_workflow": "Deploy to GitHub Pages",
-        "ci_workflow": "CI",
-    },
-    "ward-helper": {
-        "live_url": "https://eiasash.github.io/ward-helper/",
-        "sw_url":   "https://eiasash.github.io/ward-helper/sw.js",
-        "sw_re":    r"VERSION\s*=\s*'ward-v([^']+)'",
-        "version_files": [
-            ("package.json", r'"version"\s*:\s*"([^"]+)"'),
-        ],
-        "shared_engine_files": [],
-        "deploy_workflow": "Deploy to GitHub Pages",
-        "ci_workflow": "CI",
-    },
     "Toranot": {
         "live_url":   "https://toranot.netlify.app",
         "audit_url":  "https://toranot.netlify.app/.netlify/functions/self-audit",
@@ -103,14 +69,6 @@ REPO_CONFIG: dict[str, dict[str, Any]] = {
         "version_files": [],
         "shared_engine_files": [],
         # Toranot has no GH Pages — Netlify deploys; we trust the self-audit endpoint.
-    },
-    "watch-advisor2": {
-        "live_url":   "https://watch-advisor2.netlify.app",
-        "snapshot_url": "https://watch-advisor2.netlify.app/.netlify/functions/skill-snapshot",
-        # skill-snapshot requires a Bearer token by design — a 401 means "up + auth-gated", not down.
-        "snapshot_auth_gated": True,
-        "version_files": [],
-        "shared_engine_files": [],
     },
 }
 
@@ -1345,9 +1303,7 @@ def probe_backup_get_rpc() -> list[dict[str, Any]]:
 # detecting CI-red main. If this set changes (a new PWA joins the family,
 # or one is retired), update both this list AND the rotation tooling
 # (`scripts/rotate_dispatch_pat.py`'s DEFAULT_REPOS).
-DISPATCH_NOTIFY_REPOS: tuple[str, ...] = (
-    "Geriatrics", "InternalMedicine", "FamilyMedicine", "ward-helper",
-)
+DISPATCH_NOTIFY_REPOS: tuple[str, ...] = ("Geriatrics",)
 DISPATCH_NOTIFY_WORKFLOW = "notify-auto-audit.yml"
 
 
@@ -2517,14 +2473,11 @@ def run() -> dict[str, Any]:
 
         report["repos"][repo] = repo_report
 
-    sys.stderr.write("[probe] sibling drift\n")
-    report["cross_cutting"]["sibling_drift"] = probe_sibling_drift()
-
-    sys.stderr.write("[probe] study plan parity\n")
-    report["cross_cutting"]["study_plan_parity"] = probe_study_plan_parity()
-
-    sys.stderr.write("[probe] honest stats parity\n")
-    report["cross_cutting"]["honest_stats_parity"] = probe_honest_stats_parity()
+    # Sibling parity (Geri vs InternalMedicine vs FamilyMedicine) and the ward-helper
+    # probes are off: those apps are retired, so there is nothing to compare against.
+    report["cross_cutting"]["sibling_drift"] = []
+    report["cross_cutting"]["study_plan_parity"] = []
+    report["cross_cutting"]["honest_stats_parity"] = []
 
     sys.stderr.write("[probe] study plan rpc smoke\n")
     report["cross_cutting"]["study_plan_rpc"] = probe_study_plan_rpc()
@@ -2538,11 +2491,8 @@ def run() -> dict[str, Any]:
     sys.stderr.write("[probe] dispatch PAT freshness\n")
     report["cross_cutting"]["dispatch_pat_freshness"] = probe_dispatch_pat_freshness()
 
-    sys.stderr.write("[probe] ward_helper pull rpc smoke\n")
-    report["cross_cutting"]["ward_helper_pull_rpc"] = probe_ward_helper_pull_rpc()
-
-    sys.stderr.write("[probe] ward_helper sync wiring (client-side static check)\n")
-    report["cross_cutting"]["ward_helper_sync_wiring"] = probe_ward_helper_sync_wiring()
+    report["cross_cutting"]["ward_helper_pull_rpc"] = []
+    report["cross_cutting"]["ward_helper_sync_wiring"] = []
 
     sys.stderr.write("[probe] scheduler health\n")
     report["cross_cutting"]["scheduler_health"] = probe_scheduler_health()
