@@ -1,0 +1,483 @@
+{
+  "generated_at": "2026-09-29T12:50:52.584420+00:00",
+  "tool": "auto-audit Tier 1 monitor",
+  "repos": {
+    "Geriatrics": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Weekly Audit (weekly-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/Geriatrics/actions/runs/36299029700. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36299029700"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "package.json": "10.64.195",
+          "shlav-a-mega.html": "10.64.195"
+        },
+        "live_sw_version": "10.64.195",
+        "workflows": {
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5d3aaeb",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/35175011077",
+            "updated_at": "2026-09-17T02:35:46Z"
+          },
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5d3aaeb",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/35175011089",
+            "updated_at": "2026-09-17T02:35:50Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5d3aaeb",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/35175011100",
+            "updated_at": "2026-09-17T02:35:48Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5d3aaeb",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/35175011129",
+            "updated_at": "2026-09-17T02:36:00Z"
+          },
+          "stage-a CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5d3aaeb",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/35175011095",
+            "updated_at": "2026-09-17T03:05:51Z"
+          },
+          "pages build and deployment": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5d3aaeb",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/35175010294",
+            "updated_at": "2026-09-17T02:36:05Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "86652ea",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/35158073129",
+            "updated_at": "2026-09-16T22:31:13Z"
+          }
+        }
+      }
+    },
+    "InternalMedicine": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Notify auto-audit (notify-auto-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/InternalMedicine/actions/runs/36169566868. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/36169566868"
+        },
+        {
+          "severity": "warning",
+          "kind": "canonical-fabrication",
+          "msg": "Pnimit deployed bundle has unrecognized `t` value(s): ['2026-Jun']",
+          "body": "`data/questions.json` on the live deploy contains 1 `t` value(s) not declared in this probe's `CANONICAL_SESSION_TAGS` or `NON_CANONICAL_TAGS`: ['2026-Jun'].\n\nDecide handling before this accumulates silently:\n- New exam session \u2192 add tag to `CANONICAL_SESSION_TAGS` AND create the matching canonical file under `scripts/exam_audit/canonical/`.\n- New non-canonical source (textbook, AI model, etc.) \u2192 add to `NON_CANONICAL_TAGS` so the sampler skips it correctly.\n\nSample-eligible this run: 947/1706 questions. Unknown-tag questions are excluded from sampling.",
+          "labels": [
+            "auto-audit"
+          ],
+          "url": "https://github.com/Eiasash/InternalMedicine/tree/main/scripts/exam_audit/canonical"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "src/core/constants.js": "10.4.61",
+          "sw.js": "10.4.61"
+        },
+        "live_sw_version": "10.4.61",
+        "workflows": {
+          "npm_and_yarn in /. for @vitest/mocker - Update #1567382924": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "99fb7a1",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/34423071499",
+            "updated_at": "2026-09-10T00:52:37Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "3f0126a",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/32543703606",
+            "updated_at": "2026-08-22T01:31:57Z"
+          },
+          "Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "3f0126a",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/31930581270",
+            "updated_at": "2026-08-16T06:06:12Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "c4cae41",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/29259826747",
+            "updated_at": "2026-07-13T14:52:59Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c4cae41",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/29259826290",
+            "updated_at": "2026-07-13T14:53:01Z"
+          },
+          "Deploy to GitHub Pages": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c4cae41",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/29259823686",
+            "updated_at": "2026-07-13T14:53:28Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "f846476",
+            "url": "https://github.com/Eiasash/InternalMedicine/actions/runs/29236466921",
+            "updated_at": "2026-07-13T08:44:18Z"
+          }
+        }
+      }
+    },
+    "FamilyMedicine": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Notify auto-audit (notify-auto-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/FamilyMedicine/actions/runs/36169573444. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/36169573444"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "package.json": "1.26.22",
+          "src/core/constants.js": "1.26.22",
+          "sw.js": "1.26.22"
+        },
+        "live_sw_version": "1.26.22",
+        "workflows": {
+          "Distractor Autopsy Generator": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "42f3111",
+            "url": "https://github.com/Eiasash/FamilyMedicine/actions/runs/28297860909",
+            "updated_at": "2026-06-27T18:24:15Z"
+          }
+        }
+      }
+    },
+    "ward-helper": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Notify auto-audit (notify-auto-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/ward-helper/actions/runs/36169579669. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169579669"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "package.json": "1.46.33"
+        },
+        "live_sw_version": "1.46.33",
+        "workflows": {
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36509398651",
+            "updated_at": "2026-09-29T01:45:30Z"
+          },
+          "npm_and_yarn in /. for ip-address - Update #1596819009": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36509317645",
+            "updated_at": "2026-09-29T01:45:25Z"
+          },
+          "audit-fix-deploy": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36299385001",
+            "updated_at": "2026-09-27T06:13:32Z"
+          },
+          "npm_and_yarn in / for vitest - Update #1592153442": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169727825",
+            "updated_at": "2026-09-25T17:52:14Z"
+          },
+          "npm_and_yarn in /. for react-router - Update #1592152802": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169605299",
+            "updated_at": "2026-09-25T17:51:07Z"
+          },
+          "npm_and_yarn in /. for @vitest/mocker - Update #1592152788": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169596422",
+            "updated_at": "2026-09-25T17:50:55Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169579669",
+            "updated_at": "2026-09-25T17:50:03Z"
+          },
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169579737",
+            "updated_at": "2026-09-25T17:50:41Z"
+          },
+          "Deploy to GitHub Pages": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169579754",
+            "updated_at": "2026-09-25T17:50:41Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "46243fe",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/36169579734",
+            "updated_at": "2026-09-25T17:51:09Z"
+          },
+          "npm_and_yarn in /. for vitest - Update #1569838922": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "daaaab1",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/34540469384",
+            "updated_at": "2026-09-10T23:05:23Z"
+          },
+          "npm_and_yarn in /. for @vitest/mocker - Update #1567302258": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "daaaab1",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/34420542386",
+            "updated_at": "2026-09-10T00:16:48Z"
+          },
+          "npm_and_yarn in /. for react-router-dom - Update #1564074176": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "daaaab1",
+            "url": "https://github.com/Eiasash/ward-helper/actions/runs/34257859545",
+            "updated_at": "2026-09-08T17:34:53Z"
+          }
+        }
+      }
+    },
+    "Toranot": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "Toranot.self-audit_endpoint_unhealthy",
+          "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 403"
+        },
+        {
+          "severity": "warning",
+          "kind": "Toranot.skill-snapshot_recent_errors",
+          "msg": "4 recent errors"
+        }
+      ],
+      "raw": {
+        "workflows": {
+          "RLS sanity pass (shared krmlzwwelqvlfslwltol)": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "3e63a96",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36392609408",
+            "updated_at": "2026-09-28T07:37:10Z"
+          },
+          "Toranot Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "3e63a96",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36381228143",
+            "updated_at": "2026-09-28T05:17:32Z"
+          },
+          "CI / Deploy": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "3e63a96",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36169586585",
+            "updated_at": "2026-09-25T17:51:16Z"
+          },
+          "Netlify Deploy Monitor": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "3e63a96",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36169586785",
+            "updated_at": "2026-09-25T17:51:50Z"
+          },
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "3e63a96",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36169586645",
+            "updated_at": "2026-09-25T17:50:10Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "c2b5d22",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36169153982",
+            "updated_at": "2026-09-25T17:45:51Z"
+          },
+          "npm_and_yarn in /. for baseline-browser-mapping - Update #1570075222": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c2b5d22",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/34547675409",
+            "updated_at": "2026-09-11T00:44:03Z"
+          },
+          "npm_and_yarn in /. for vitest - Update #1569803946": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c2b5d22",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/34539437332",
+            "updated_at": "2026-09-10T22:52:12Z"
+          },
+          "npm_and_yarn in /. for @vitest/mocker - Update #1567432309": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "c2b5d22",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/34424269066",
+            "updated_at": "2026-09-10T01:09:39Z"
+          },
+          "npm_and_yarn in /. for browserslist - Update #1561128934": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c2b5d22",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/34101684568",
+            "updated_at": "2026-09-07T08:39:35Z"
+          }
+        },
+        "self_audit": {
+          "http": 403,
+          "ok": false,
+          "issues": [
+            {
+              "severity": "warning",
+              "kind": "Toranot.self-audit_endpoint_unhealthy",
+              "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 403"
+            }
+          ]
+        },
+        "skill_snapshot": {
+          "patientCount": 12,
+          "tokenUsage": {
+            "currentMonth": "2026-09",
+            "currentMonthTotals": {
+              "input_tokens": 1486,
+              "output_tokens": 1399,
+              "call_count": 6
+            },
+            "allTimeTotals": {
+              "input_tokens": 143082014,
+              "output_tokens": 25984555,
+              "call_count": 80591
+            }
+          },
+          "claudeModel": "claude-sonnet-4-6",
+          "recentErrorCount": 4
+        }
+      }
+    },
+    "watch-advisor2": {
+      "issues": [],
+      "raw": {
+        "workflows": {
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "28a01e7",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/30994263151",
+            "updated_at": "2026-08-05T09:40:57Z"
+          },
+          "Test": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "28a01e7",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/30994263177",
+            "updated_at": "2026-08-05T09:42:30Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "3c59acd",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/30994050424",
+            "updated_at": "2026-08-05T09:37:39Z"
+          },
+          "Weekly Autonomous Audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "dd81a44",
+            "url": "https://github.com/Eiasash/watch-advisor2/actions/runs/25655617980",
+            "updated_at": "2026-05-11T07:09:42Z"
+          }
+        },
+        "skill_snapshot": {
+          "http": 401,
+          "ok": true,
+          "issues": [],
+          "auth_gated": true
+        }
+      }
+    }
+  },
+  "cross_cutting": {
+    "sibling_drift": [],
+    "study_plan_parity": [
+      {
+        "severity": "warning",
+        "kind": "study_plan_syllabus_drift",
+        "msg": "syllabus_data.json differs across the three medical PWAs: {'FamilyMedicine': '2b295d1317ad', 'InternalMedicine': '2b295d1317ad', 'Geriatrics': '8165cacec81b'}",
+        "auto_fix": "sibling_sync_syllabus"
+      }
+    ],
+    "study_plan_rpc": [],
+    "backup_get_rpc": [],
+    "tier2_health": [],
+    "dispatch_chain": [
+      {
+        "severity": "critical",
+        "kind": "dispatch_chain_run_failed",
+        "msg": "InternalMedicine: most recent notify-auto-audit run FAILED (sha a55ef24a, 2026-09-25T17:49:50Z). Most likely cause: AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the Actions:write scope on Eiasash/auto-audit. Push-to-probe SLA is broken; cron failsafe still runs every 30 min. Fix: rotate the PAT \u2014 see scripts/DISPATCH_PAT_ROTATION.md. Run: https://github.com/Eiasash/InternalMedicine/actions/runs/36169566868"
+      },
+      {
+        "severity": "critical",
+        "kind": "dispatch_chain_run_failed",
+        "msg": "FamilyMedicine: most recent notify-auto-audit run FAILED (sha 8487e0a5, 2026-09-25T17:49:54Z). Most likely cause: AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the Actions:write scope on Eiasash/auto-audit. Push-to-probe SLA is broken; cron failsafe still runs every 30 min. Fix: rotate the PAT \u2014 see scripts/DISPATCH_PAT_ROTATION.md. Run: https://github.com/Eiasash/FamilyMedicine/actions/runs/36169573444"
+      },
+      {
+        "severity": "critical",
+        "kind": "dispatch_chain_run_failed",
+        "msg": "ward-helper: most recent notify-auto-audit run FAILED (sha 46243fef, 2026-09-25T17:49:58Z). Most likely cause: AUTO_AUDIT_DISPATCH_PAT expired, was revoked, or lost the Actions:write scope on Eiasash/auto-audit. Push-to-probe SLA is broken; cron failsafe still runs every 30 min. Fix: rotate the PAT \u2014 see scripts/DISPATCH_PAT_ROTATION.md. Run: https://github.com/Eiasash/ward-helper/actions/runs/36169579669"
+      }
+    ],
+    "ward_helper_pull_rpc": [],
+    "ward_helper_sync_wiring": [],
+    "feedback_queue": [],
+    "honest_stats_parity": [],
+    "dispatch_pat_freshness": [],
+    "scheduler_health": []
+  }
+}
