@@ -1,0 +1,149 @@
+{
+  "generated_at": "2026-10-02T12:49:06.532729+00:00",
+  "tool": "auto-audit Tier 1 monitor",
+  "repos": {
+    "Geriatrics": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Weekly Audit (weekly-audit.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/Geriatrics/actions/runs/36299029700. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36299029700"
+        }
+      ],
+      "raw": {
+        "versions": {
+          "package.json": "10.64.195",
+          "shlav-a-mega.html": "10.64.195"
+        },
+        "live_sw_version": "10.64.195",
+        "workflows": {
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "09d444e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/33478177090",
+            "updated_at": "2026-09-01T06:34:31Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "09d444e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/33478177097",
+            "updated_at": "2026-09-01T06:34:26Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "09d444e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/33478177125",
+            "updated_at": "2026-09-01T06:34:30Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "09d444e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/33478177076",
+            "updated_at": "2026-09-01T06:34:51Z"
+          },
+          "pages build and deployment": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "09d444e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/33478176315",
+            "updated_at": "2026-09-01T06:34:49Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "ad98433",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/33477271729",
+            "updated_at": "2026-09-01T06:21:54Z"
+          },
+          "Weekly Audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "637ade7",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/30191757324",
+            "updated_at": "2026-07-26T06:53:01Z"
+          }
+        }
+      }
+    },
+    "Toranot": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "Toranot.self-audit_endpoint_unhealthy",
+          "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 403"
+        },
+        {
+          "severity": "warning",
+          "kind": "Toranot.skill-snapshot_recent_errors",
+          "msg": "4 recent errors"
+        }
+      ],
+      "raw": {
+        "workflows": {
+          "Toranot Weekly Audit": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "8f197dc",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/23423078053",
+            "updated_at": "2026-03-23T05:36:53Z"
+          },
+          "CI / Deploy": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "8f197dc",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/23369913096",
+            "updated_at": "2026-03-21T02:17:33Z"
+          }
+        },
+        "self_audit": {
+          "http": 403,
+          "ok": false,
+          "issues": [
+            {
+              "severity": "warning",
+              "kind": "Toranot.self-audit_endpoint_unhealthy",
+              "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 403"
+            }
+          ]
+        },
+        "skill_snapshot": {
+          "patientCount": 12,
+          "tokenUsage": {
+            "currentMonth": "2026-10",
+            "currentMonthTotals": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "call_count": 0
+            },
+            "allTimeTotals": {
+              "input_tokens": 143091076,
+              "output_tokens": 25988027,
+              "call_count": 80604
+            }
+          },
+          "claudeModel": "claude-sonnet-4-6",
+          "recentErrorCount": 4
+        }
+      }
+    }
+  },
+  "cross_cutting": {
+    "sibling_drift": [],
+    "study_plan_parity": [],
+    "study_plan_rpc": [],
+    "backup_get_rpc": [],
+    "tier2_health": [],
+    "dispatch_chain": [],
+    "ward_helper_pull_rpc": [],
+    "ward_helper_sync_wiring": [],
+    "feedback_queue": [],
+    "honest_stats_parity": [],
+    "dispatch_pat_freshness": [],
+    "scheduler_health": []
+  }
+}
