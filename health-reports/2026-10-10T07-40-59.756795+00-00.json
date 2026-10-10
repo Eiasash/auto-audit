@@ -1,0 +1,197 @@
+{
+  "generated_at": "2026-10-10T07:40:59.756795+00:00",
+  "tool": "auto-audit Tier 1 monitor",
+  "repos": {
+    "Geriatrics": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "10.64.195",
+          "shlav-a-mega.html": "10.64.195"
+        },
+        "live_sw_version": "10.64.195",
+        "workflows": {
+          "Distractor Branch \u2192 Main (Auto-PR)": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/37282715911",
+            "updated_at": "2026-10-05T08:18:00Z"
+          },
+          "Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/37187374740",
+            "updated_at": "2026-10-04T07:59:40Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36692907255",
+            "updated_at": "2026-09-30T08:56:49Z"
+          },
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36692875511",
+            "updated_at": "2026-09-30T08:56:41Z"
+          },
+          "Notify auto-audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36692875316",
+            "updated_at": "2026-09-30T08:56:38Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36692875497",
+            "updated_at": "2026-09-30T08:56:39Z"
+          },
+          "pages build and deployment": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36692874302",
+            "updated_at": "2026-09-30T08:57:27Z"
+          },
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "c548c8e",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/36692875478",
+            "updated_at": "2026-09-30T08:56:58Z"
+          }
+        }
+      }
+    },
+    "Toranot": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Netlify Deploy Monitor (netlify-deploy-monitor.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/Toranot/actions/runs/36692923485. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/Toranot/actions/runs/36692923485"
+        },
+        {
+          "severity": "warning",
+          "kind": "Toranot.self-audit_endpoint_unhealthy",
+          "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 403"
+        },
+        {
+          "severity": "warning",
+          "kind": "Toranot.skill-snapshot_recent_errors",
+          "msg": "4 recent errors"
+        }
+      ],
+      "raw": {
+        "workflows": {
+          "RLS sanity pass (shared krmlzwwelqvlfslwltol)": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/37279212848",
+            "updated_at": "2026-10-05T07:42:23Z"
+          },
+          "Toranot Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/37268030397",
+            "updated_at": "2026-10-05T05:30:20Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36693193561",
+            "updated_at": "2026-09-30T08:59:31Z"
+          },
+          "npm_and_yarn in /. for undici - Update #1599752581": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36692944819",
+            "updated_at": "2026-09-30T08:58:06Z"
+          },
+          "npm_and_yarn in /. for @vitest/mocker - Update #1599752566": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36692945163",
+            "updated_at": "2026-09-30T08:58:28Z"
+          },
+          "Netlify Deploy Monitor": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36692923485",
+            "updated_at": "2026-09-30T09:00:23Z"
+          },
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36692923412",
+            "updated_at": "2026-09-30T08:57:05Z"
+          },
+          "CI / Deploy": {
+            "conclusion": "cancelled",
+            "status": "completed",
+            "sha": "06aa76b",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/36692923531",
+            "updated_at": "2026-09-30T08:58:11Z"
+          }
+        },
+        "self_audit": {
+          "http": 403,
+          "ok": false,
+          "issues": [
+            {
+              "severity": "warning",
+              "kind": "Toranot.self-audit_endpoint_unhealthy",
+              "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 403"
+            }
+          ]
+        },
+        "skill_snapshot": {
+          "patientCount": 12,
+          "tokenUsage": {
+            "currentMonth": "2026-10",
+            "currentMonthTotals": {
+              "input_tokens": 9297,
+              "output_tokens": 2357,
+              "call_count": 14
+            },
+            "allTimeTotals": {
+              "input_tokens": 143100373,
+              "output_tokens": 25990384,
+              "call_count": 80618
+            }
+          },
+          "claudeModel": "claude-sonnet-4-6",
+          "recentErrorCount": 4
+        }
+      }
+    }
+  },
+  "cross_cutting": {
+    "sibling_drift": [],
+    "study_plan_parity": [],
+    "study_plan_rpc": [],
+    "backup_get_rpc": [],
+    "tier2_health": [],
+    "dispatch_chain": [],
+    "ward_helper_pull_rpc": [],
+    "ward_helper_sync_wiring": [],
+    "feedback_queue": [],
+    "honest_stats_parity": [],
+    "dispatch_pat_freshness": [],
+    "scheduler_health": []
+  }
+}
