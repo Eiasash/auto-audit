@@ -1,0 +1,39 @@
+# Anthropic Workload Identity Federation smoke test: exchanges this repo's
+# GitHub OIDC token for an Anthropic access token. No model call, no API spend.
+# Runs only when this file changes, or by hand (Actions > Run workflow).
+name: anthropic-wif-test
+on:
+  push:
+    paths:
+      - .github/workflows/anthropic-wif-test.yml
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  call-claude:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch GitHub OIDC token
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken('https://api.anthropic.com');
+            core.setSecret(token);
+            core.exportVariable('JWT', token);
+      - name: Exchange for an Anthropic access token
+        # explicit bash = -eo pipefail, so a rejected exchange fails the job instead of passing through jq
+        shell: bash
+        run: |
+          curl -sS --fail-with-body https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" \
+            --data @- <<JSON | jq 'with_entries(if (.key | test("token$")) then .value = "<redacted>" else . end)'
+          {
+            "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+            "assertion": "$JWT",
+            "federation_rule_id": "fdrl_01Q3ZYLvYUacv91gqk5XzXHc",
+            "organization_id": "ed172cea-a557-4b21-95b1-eef5ca8152b5",
+            "service_account_id": "svac_01LMfh7waFYEZpWCjKoroqJG",
+            "workspace_id": "wrkspc_01GCfhFmuvWqSEnRuvXXr7PT"
+          }
+          JSON
