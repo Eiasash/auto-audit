@@ -1,0 +1,169 @@
+{
+  "generated_at": "2026-11-26T01:07:17.428157+00:00",
+  "tool": "auto-audit Tier 1 monitor",
+  "repos": {
+    "Geriatrics": {
+      "issues": [],
+      "raw": {
+        "versions": {
+          "package.json": "10.64.195",
+          "shlav-a-mega.html": "10.64.195"
+        },
+        "live_sw_version": "10.64.195",
+        "workflows": {
+          "CI": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5592056",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/42419620110",
+            "updated_at": "2026-11-07T22:14:14Z"
+          },
+          "pages build and deployment": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5592056",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/42419619299",
+            "updated_at": "2026-11-07T22:14:14Z"
+          },
+          "Integrity Guard": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5592056",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/42419620112",
+            "updated_at": "2026-11-07T22:13:59Z"
+          },
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "5592056",
+            "url": "https://github.com/Eiasash/Geriatrics/actions/runs/42419620137",
+            "updated_at": "2026-11-07T22:13:59Z"
+          }
+        }
+      }
+    },
+    "Toranot": {
+      "issues": [
+        {
+          "severity": "warning",
+          "kind": "workflow_failure_streak",
+          "msg": "Netlify Deploy Monitor (netlify-deploy-monitor.yml) has failed 3 consecutive runs on main. Latest: https://github.com/Eiasash/Toranot/actions/runs/44755220406. If this is expected, add to WORKFLOW_FAILURE_ALLOWLIST in scripts/probe.py.",
+          "url": "https://github.com/Eiasash/Toranot/actions/runs/44755220406"
+        },
+        {
+          "severity": "warning",
+          "kind": "Toranot.self-audit_endpoint_unhealthy",
+          "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 401"
+        },
+        {
+          "severity": "warning",
+          "kind": "Toranot.skill-snapshot_endpoint_unhealthy",
+          "msg": "https://toranot.netlify.app/.netlify/functions/skill-snapshot \u2192 HTTP 401"
+        }
+      ],
+      "raw": {
+        "workflows": {
+          "RLS sanity pass (shared krmlzwwelqvlfslwltol)": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/45129611349",
+            "updated_at": "2026-11-23T07:14:17Z"
+          },
+          "Toranot Weekly Audit": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/45116195780",
+            "updated_at": "2026-11-23T05:11:54Z"
+          },
+          "npm_and_yarn in /. for @vitest/mocker - Update #1719098927": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/44761514073",
+            "updated_at": "2026-11-20T15:16:52Z"
+          },
+          "Claude Code": {
+            "conclusion": "skipped",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/44755423204",
+            "updated_at": "2026-11-20T14:38:37Z"
+          },
+          "npm_and_yarn in /. for @vitest/mocker - Update #1719040725": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/44755238435",
+            "updated_at": "2026-11-20T14:38:17Z"
+          },
+          "npm_and_yarn in /. for source-map-js - Update #1719040698": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/44755234934",
+            "updated_at": "2026-11-20T14:38:22Z"
+          },
+          "gitleaks": {
+            "conclusion": "success",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/44755220349",
+            "updated_at": "2026-11-20T14:37:28Z"
+          },
+          "CI / Deploy": {
+            "conclusion": "cancelled",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/44755220466",
+            "updated_at": "2026-11-20T14:38:30Z"
+          },
+          "Netlify Deploy Monitor": {
+            "conclusion": "failure",
+            "status": "completed",
+            "sha": "d99827c",
+            "url": "https://github.com/Eiasash/Toranot/actions/runs/44755220406",
+            "updated_at": "2026-11-20T14:41:02Z"
+          }
+        },
+        "self_audit": {
+          "http": 401,
+          "ok": false,
+          "issues": [
+            {
+              "severity": "warning",
+              "kind": "Toranot.self-audit_endpoint_unhealthy",
+              "msg": "https://toranot.netlify.app/.netlify/functions/self-audit \u2192 HTTP 401"
+            }
+          ]
+        },
+        "skill_snapshot": {
+          "http": 401,
+          "ok": false,
+          "issues": [
+            {
+              "severity": "warning",
+              "kind": "Toranot.skill-snapshot_endpoint_unhealthy",
+              "msg": "https://toranot.netlify.app/.netlify/functions/skill-snapshot \u2192 HTTP 401"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "cross_cutting": {
+    "sibling_drift": [],
+    "study_plan_parity": [],
+    "study_plan_rpc": [],
+    "backup_get_rpc": [],
+    "tier2_health": [],
+    "dispatch_chain": [],
+    "ward_helper_pull_rpc": [],
+    "ward_helper_sync_wiring": [],
+    "feedback_queue": [],
+    "honest_stats_parity": [],
+    "dispatch_pat_freshness": [],
+    "scheduler_health": []
+  }
+}
